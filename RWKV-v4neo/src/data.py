@@ -12,8 +12,20 @@ def get_data_module(data_path: str,
     if source is not None:
         src_dataset = load_dataset(source, split='train')
         tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer)
-        src_dataset = src_dataset.map(lambda x: tokenizer(x['text']),
-                                      batched=True)
+
+        def map_tokenizer(x):
+            if 'prompt' in x and 'completion' in x:
+                # Tokenize both prompt and completion
+                ret = tokenizer(x['prompt'] + x['completion'])
+
+                # Add attention mask, 0 for prompt, 1 for completion
+                ret['attention_mask'] = [0] * len(x['prompt']) + [1] * len(x['completion'])
+                return ret
+            else:
+                # Fallback to standard text tokenization
+                return tokenizer(x['text'])
+
+        src_dataset = src_dataset.map(map_tokenizer, batched=True)
         src_dataset = src_dataset.train_test_split(test_size=0.1,
                                                    shuffle=False)
         src_dataset.save_to_disk(data_path)
