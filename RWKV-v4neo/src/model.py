@@ -380,14 +380,33 @@ class RWKV(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         seq = batch['input_ids']
+        seq_mask = batch['attention_mask']
+
+        # Check if input_ids contain the valid idx, target pair
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
 
+        # Check if attent mask is set, if not initialize it
+        if seq_mask is None or seq_mask.ndim != 2:
+            seq_mask = torch.ones_like(seq[:, 1:])
+        
+        # Not sure if i understood the warmup steps correctly
+        # But instead of skipping the tokens by cutting the sequence
+        # Shouldn't we just apply a mask to the skipped tokens instead??
         prev_step = 0
         for step, len_cut in zip(self.ctx_len_warmup_steps,
                                  self.ctx_len_cutoffs):
             if prev_step <= self.global_step < step and len_cut < seq.shape[1] - 1:
                 pos = randint(0, seq.shape[1] - len_cut - 1)
-                seq = seq[:, pos:pos + len_cut + 1]
+                
+                # Original
+                # seq = seq[:, pos:pos + len_cut + 1]
+
+                # Changed to use masking
+                seq = seq[:, :pos + len_cut + 1]
+                seq_mask = seq_mask[:, :pos + len_cut + 1]
+                # Set the attention mask to 0 for the skipped tokens
+                seq_mask[:, :pos] = 0
+
                 break
             prev_step = step
 
