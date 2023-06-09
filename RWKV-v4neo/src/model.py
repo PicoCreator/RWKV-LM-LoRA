@@ -417,11 +417,12 @@ class RWKV(L.LightningModule):
 
         print(f'step {self.global_step} real ctx_len {T}')
 
-        def checkpointed_step(idx, targets, prev_loss, last_states,
+        def checkpointed_step(idx, targets, mask, prev_loss, last_states,
                               prev_steps):
             logits, new_states = self(idx, last_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
-                                   targets.view(-1))
+                                   targets.view(-1), reduction="none")
+            loss = torch.sum(loss * mask.view(-1)) / torch.max(1, torch.sum(mask))
             loss = L2Wrap.apply(loss, logits, B * T)
             new_steps = prev_steps + idx.shape[1]
             new_loss = prev_loss * (prev_steps / new_steps) + loss * (
@@ -439,6 +440,7 @@ class RWKV(L.LightningModule):
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     total_loss,
                     states,
                     steps,
@@ -447,6 +449,7 @@ class RWKV(L.LightningModule):
                 total_loss, states, steps = checkpointed_step(
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     total_loss,
                     states,
                     steps,
