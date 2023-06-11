@@ -475,10 +475,10 @@ class RWKV(L.LightningModule):
 
     @rank_zero_only
     def validation_step(self, batch, batch_idx):
+        return
 
         seq = batch['input_ids']
 
-        return
         # print("validation seq", seq)
 
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
