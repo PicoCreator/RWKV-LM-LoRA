@@ -147,3 +147,5 @@ checkpoint/
 dataset/
 model/
 data_path/
+node_modules/
+!*.sh
