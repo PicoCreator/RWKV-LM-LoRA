@@ -53,6 +53,10 @@ def get_data_module(data_path: str,
                     'token_type_ids': token_type_ids,
                     'attention_mask': attention_mask,
                 }
+                
+                # # (debugging) Print the output object
+                # print("ret: ", ret)
+
                 return ret
             else:
                 # Fallback to standard text tokenization

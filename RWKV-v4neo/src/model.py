@@ -412,6 +412,10 @@ class RWKV(L.LightningModule):
 
         idx, targets = seq[:, :-1], seq[:, 1:]
 
+        # print("L idx ", idx)
+        # print("L targets ", targets)
+        # print("L mask ", seq_mask)
+
         B, T = idx.shape
         C = self.n_embd
 
@@ -422,7 +426,14 @@ class RWKV(L.LightningModule):
             logits, new_states = self(idx, last_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
                                    targets.view(-1), reduction="none")
-            loss = torch.sum(loss * mask.view(-1)) / torch.max(1, torch.sum(mask))
+            # # debug logging
+            # print("idx ", idx)
+            # print("targets ", targets)
+            # print("loss ", loss)
+            # print("mask ", mask)
+
+            submask = mask.view(-1)[:loss.shape[0]]
+            loss = torch.sum(loss * submask) / torch.max(torch.sum(submask), torch.tensor(1, dtype=submask.dtype))
             loss = L2Wrap.apply(loss, logits, B * T)
             new_steps = prev_steps + idx.shape[1]
             new_loss = prev_loss * (prev_steps / new_steps) + loss * (
@@ -466,9 +477,14 @@ class RWKV(L.LightningModule):
     def validation_step(self, batch, batch_idx):
 
         seq = batch['input_ids']
-        assert isinstance(seq, torch.Tensor) and seq.ndim == 1
 
-        T, = idx.shape
+        return
+        # print("validation seq", seq)
+
+        assert isinstance(seq, torch.Tensor) and seq.ndim == 2
+
+        seq = seq.squeeze(0)  # Flatten the seq tensor: [1, T] -> [T,]
+        T, = seq.shape
         C = self.n_embd
 
         state = [init_block_state(1, C, seq.device, seq.dtype)] * self.n_layer
