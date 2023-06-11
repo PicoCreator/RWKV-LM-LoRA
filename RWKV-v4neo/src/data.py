@@ -10,16 +10,49 @@ def get_data_module(data_path: str,
                     source: str = None,
                     tokenizer: str = None) -> LightningDataModule:
     if source is not None:
+
+        if tokenizer is None:
+            raise ValueError('Tokenizer must be specified if source is specified')
+
         src_dataset = load_dataset(source, split='train')
         tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer)
 
         def map_tokenizer(x):
             if 'prompt' in x and 'completion' in x:
-                # Tokenize both prompt and completion
-                ret = tokenizer(x['prompt'] + x['completion'])
+                # Array of output valeus we will return
+                input_ids = []
+                token_type_ids = []
+                attention_mask = []
 
-                # Add attention mask, 0 for prompt, 1 for completion
-                ret['attention_mask'] = [0] * len(x['prompt']) + [1] * len(x['completion'])
+                # Tokenize both prompt and completion
+                # Note that the tokenizer will process and return the input_ids in batches
+                prompt_encodings = tokenizer(x['prompt'])
+                completion_encodings = tokenizer(x['completion'])
+
+                # # (debugging) Print the prompt and completion encoding objects 
+                # print("prompt: ", x['prompt'])
+                # print("prompt: ", x['completion'])
+                # print("prompt_encodings: ", prompt_encodings)
+                # print("completion_encodings: ", completion_encodings)
+
+                # Important note, prompt_encodings['input_ids'] are list, containing list of the actual values
+                # so we need to process them accordingly (batch processing)
+                for i in range(len(prompt_encodings['input_ids'])):
+                    # Join the two input_ids lists
+                    input_ids.append(prompt_encodings['input_ids'][i] + completion_encodings['input_ids'][i])
+
+                    # Join the two token_type_ids lists
+                    token_type_ids.append(prompt_encodings['token_type_ids'][i] + completion_encodings['token_type_ids'][i])
+
+                    # Setup the attention mask, 0 for prompt, 1 for completion
+                    attention_mask.append([0] * len(prompt_encodings['input_ids'][i]) + [1] * len(completion_encodings['input_ids'][i]))
+
+                # Prepare the output object
+                ret = {
+                    'input_ids': input_ids,
+                    'token_type_ids': token_type_ids,
+                    'attention_mask': attention_mask,
+                }
                 return ret
             else:
                 # Fallback to standard text tokenization
