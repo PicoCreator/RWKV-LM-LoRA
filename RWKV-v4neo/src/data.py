@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 
 from datasets import load_from_disk, load_dataset
 from transformers import PreTrainedTokenizerFast
-
+from multiprocessing import cpu_count
 
 def get_data_module(data_path: str,
                     source: str = None,
@@ -14,7 +14,10 @@ def get_data_module(data_path: str,
         if tokenizer is None:
             raise ValueError('Tokenizer must be specified if source is specified')
 
-        src_dataset = load_dataset(source, split='train')
+        # Get the number of cpus
+        num_cpus = cpu_count()
+
+        src_dataset = load_dataset(source, split='train', num_proc=num_cpus)
         tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer)
 
         def map_tokenizer(x):
