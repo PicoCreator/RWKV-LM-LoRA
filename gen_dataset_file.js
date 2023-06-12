@@ -24,9 +24,9 @@ async function generateJsonl(outputFilePath, maxWords, numSamples) {
 		"Memorise and reply back with the following document:\n```\n{{document}}```\n\nReply:",
 	];
 	const completionTemplates = [
-		"\n```\n{{document}}\n```",
-		"\n```\n{{document}}\n```",
-		"\n```\n{{document}}\n```",
+		"\n```\n{{document}}\n```\n",
+		"\n```\n{{document}}\n```\n",
+		"\n```\n{{document}}\n```\n",
 	];
 
 	const getRandomInt = (min, max) => {

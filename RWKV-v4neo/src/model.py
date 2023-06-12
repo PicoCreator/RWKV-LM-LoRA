@@ -419,8 +419,6 @@ class RWKV(L.LightningModule):
         B, T = idx.shape
         C = self.n_embd
 
-        print(f'step {self.global_step} real ctx_len {T}')
-
         def checkpointed_step(idx, targets, mask, prev_loss, last_states,
                               prev_steps):
             logits, new_states = self(idx, last_states)
@@ -465,6 +463,10 @@ class RWKV(L.LightningModule):
                     states,
                     steps,
                 )
+        
+        print(f'step {self.global_step}, substep {batch_idx}, real_ctx_len {T}, train/loss {total_loss}')
+        self.log('sub_step', batch_idx)
+        self.log('real_ctx_len', T)
         self.log('train/loss', total_loss)
         return total_loss
 
