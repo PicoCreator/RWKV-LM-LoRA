@@ -6,40 +6,40 @@ trainer:
   devices: 1
   num_nodes: 1
   precision: bf16
-  # logger:
-  #   class_path: lightning.pytorch.loggers.WandbLogger
-  #   init_args:
-  #     name: null
-  #     save_dir: .
-  #     version: null
-  #     offline: false
-  #     dir: null
-  #     id: null
-  #     anonymous: null
-  #     project: lightning_logs
-  #     log_model: false
-  #     experiment: null
-  #     prefix: ''
-  #     checkpoint_name: null
-  #     job_type: null
-  #     config: null
-  #     entity: null
-  #     reinit: null
-  #     tags: null
-  #     group: null
-  #     notes: null
-  #     magic: null
-  #     config_exclude_keys: null
-  #     config_include_keys: null
-  #     mode: null
-  #     allow_val_change: null
-  #     resume: null
-  #     force: null
-  #     tensorboard: null
-  #     sync_tensorboard: null
-  #     monitor_gym: null
-  #     save_code: null
-  #     settings: null
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      name: null
+      save_dir: .
+      version: null
+      offline: false
+      dir: null
+      id: null
+      anonymous: null
+      project: lightning_logs
+      log_model: false
+      experiment: null
+      prefix: ''
+      checkpoint_name: null
+      job_type: null
+      config: null
+      entity: null
+      reinit: null
+      tags: null
+      group: null
+      notes: null
+      magic: null
+      config_exclude_keys: null
+      config_include_keys: null
+      mode: null
+      allow_val_change: null
+      resume: null
+      force: null
+      tensorboard: null
+      sync_tensorboard: null
+      monitor_gym: null
+      save_code: null
+      settings: null
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
