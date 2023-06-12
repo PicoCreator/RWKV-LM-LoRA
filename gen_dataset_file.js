@@ -19,14 +19,14 @@ async function generateJsonl(outputFilePath, maxWords, numSamples) {
 	const writeStream = fs.createWriteStream(filePath);
 
 	const promptTemplates = [
-		"Simon:\n```\n{{document}}\n```\n\nSays:\n",
-		"Memorize the following document:\n```\n{{document}}```\n\nType it out below:\n",
-		"Memorise and reply back with the following document:\n```\n{{document}}```\n\nReply:\n",
+		"Simon:\n```\n{{document}}\n```\n\nSays:",
+		"Memorize the following document:\n```\n{{document}}```\n\nType it out below:",
+		"Memorise and reply back with the following document:\n```\n{{document}}```\n\nReply:",
 	];
 	const completionTemplates = [
-		"```\n{{document}}\n```",
-		"```\n{{document}}\n```",
-		"```\n{{document}}\n```",
+		"\n```\n{{document}}\n```",
+		"\n```\n{{document}}\n```",
+		"\n```\n{{document}}\n```",
 	];
 
 	const getRandomInt = (min, max) => {
