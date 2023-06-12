@@ -104,9 +104,9 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  load_model: /home/blealtancao/rwkv-models/RWKV-4-Pile-7B-20230406-ctx8192-test949.pth
+  load_model: /home/ubuntu/RWKV-LM-LoRA/model/RWKV-4-Raven-7B-v12-Eng98%-Other2%-20230521-ctx8192.pth
 data:
-  data_path: /home/blealtancao/rwkv-models/pile-10k-data
-  source: null
-  tokenizer: null
+  data_path: /home/ubuntu/RWKV-LM-LoRA/data_path/
+  source: /home/ubuntu/RWKV-LM-LoRA/dataset/
+  tokenizer: /home/ubuntu/RWKV-LM-LoRA//RWKV-v4neo/20B_tokenizer.json
 ckpt_path: null

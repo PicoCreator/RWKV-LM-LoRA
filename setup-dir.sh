@@ -1,5 +1,5 @@
 mkdir -p ./checkpoint/
-mkdir -p ./models/
+mkdir -p ./model/
 mkdir -p ./data_path/
 mkdir -p ./dataset/
 

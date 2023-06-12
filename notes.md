@@ -28,6 +28,7 @@ cd model
 wget https://huggingface.co/BlinkDL/rwkv-4-pile-1b5/resolve/main/RWKV-4b-Pile-1B5-20230217-7954.pth
 wget https://huggingface.co/BlinkDL/rwkv-4-pile-169m/resolve/main/RWKV-4-Pile-169M-20220807-8023.pth
 wget https://huggingface.co/BlinkDL/rwkv-4-raven/resolve/main/RWKV-4-Raven-3B-v12-Eng98%25-Other2%25-20230520-ctx4096.pth
+wget https://huggingface.co/BlinkDL/rwkv-4-raven/resolve/main/RWKV-4-Raven-7B-v12-Eng98%25-Other2%25-20230521-ctx8192.pth
 ```
 
 Run the model
