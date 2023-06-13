@@ -379,43 +379,34 @@ class RWKV(L.LightningModule):
 
         return x, new_states
 
-    def training_step(self, batch, batch_idx):
+    def compute_loss(self, batch, batch_idx, do_cutoff: bool):
         seq = batch['input_ids']
-        seq_mask = batch['attention_mask']
-
-        # Check if input_ids contain the valid idx, target pair
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
+        seq_mask = batch['attention_mask']
 
         # Check if attent mask is set, if not initialize it
         if seq_mask is None or seq_mask.ndim != 2:
             seq_mask = torch.ones_like(seq[:, 1:])
         
-        # Not sure if i understood the warmup steps correctly
-        # But instead of skipping the tokens by cutting the sequence
-        # Shouldn't we just apply a mask to the skipped tokens instead??
-        prev_step = 0
-        for step, len_cut in zip(self.ctx_len_warmup_steps,
-                                 self.ctx_len_cutoffs):
-            if prev_step <= self.global_step < step and len_cut < seq.shape[1] - 1:
-                pos = randint(0, seq.shape[1] - len_cut - 1)
-                
-                # Original
-                # seq = seq[:, pos:pos + len_cut + 1]
+        if do_cutoff:
+            prev_step = 0
+            for step, len_cut in zip(self.ctx_len_warmup_steps,
+                                    self.ctx_len_cutoffs):
+                if prev_step <= self.global_step < step and len_cut < seq.shape[1] - 1:
+                    pos = randint(0, seq.shape[1] - len_cut - 1)
+                    
+                    # Original
+                    # seq = seq[:, pos:pos + len_cut + 1]
 
-                # Changed to use masking
-                seq = seq[:, :pos + len_cut + 1]
-                seq_mask = seq_mask[:, :pos + len_cut + 1]
-                # Set the attention mask to 0 for the skipped tokens
-                seq_mask[:, :pos] = 0
-
-                break
-            prev_step = step
+                    # Changed to use masking for prefix cutoff (i do not know if this makes sense)
+                    seq = seq[:, :pos + len_cut + 1]
+                    seq_mask = seq_mask[:, :pos + len_cut + 1]
+                    # Set the attention mask to 0 for the skipped tokens
+                    seq_mask[:, :pos] = 0
+                    break
+                prev_step = step
 
         idx, targets = seq[:, :-1], seq[:, 1:]
-
-        # print("L idx ", idx)
-        # print("L targets ", targets)
-        # print("L mask ", seq_mask)
 
         B, T = idx.shape
         C = self.n_embd
@@ -458,66 +449,18 @@ class RWKV(L.LightningModule):
                     states,
                     steps,
                 )
-        
-        print(f'step {self.global_step}, substep {batch_idx}, real_ctx_len {T}, train/loss {total_loss}')
-        
-        # self.log('sub_step', batch_idx)
-        # self.log('real_ctx_len', T)
-        # self.log('train/loss', total_loss)
 
-        # Lets log each substep to wandb directly
-        wandb.log({'sub_step': batch_idx, 'real_ctx_len': T, 'train/loss': total_loss, 'trainer/global_step':self.global_step})
+        # @TODO : Figure out how to check if wandb is enabled, and skip the wandb log accordingly
+        wandb.log({'substep': batch_idx, 'real_ctx_len': T, 'train/loss': total_loss, 'trainer/global_step':self.global_step})
 
         return total_loss
 
-    def training_step_end(self, batch_parts):
-        all = self.all_gather(batch_parts)
-        if self.trainer.is_global_zero:
-            self.trainer.my_loss_all = all
+    def training_step(self, batch, batch_idx):
+        total_loss = self.compute_loss(batch, batch_idx, True)
+        self.log('train/loss', total_loss, prog_bar=True)
+        return total_loss
 
-    @rank_zero_only
     def validation_step(self, batch, batch_idx):
-        return
-
-        seq = batch['input_ids']
-
-        # print("validation seq", seq)
-
-        assert isinstance(seq, torch.Tensor) and seq.ndim == 2
-
-        seq = seq.squeeze(0)  # Flatten the seq tensor: [1, T] -> [T,]
-        T, = seq.shape
-        C = self.n_embd
-
-        state = [init_block_state(1, C, seq.device, seq.dtype)] * self.n_layer
-
-        idx, target = seq[:-1], seq[1:]
-        loss = np.array([], dtype=np.float32)
-        for i in range(math.ceil(T / self.ctx_len)):
-            logit, state = self(
-                idx[i * self.ctx_len:(i + 1) * self.ctx_len].view(1, -1),
-                state)
-            piece_loss: np.ndarray = F.cross_entropy(
-                logit,
-                target[i * self.ctx_len:(i + 1) * self.ctx_len],
-                reduction='none').float().cpu().numpy()
-            loss = np.concatenate((loss, piece_loss))
-
-        print("validation loss shape: ", loss.shape)
-        exp_mean_loss = []
-        for i in range(8, math.ceil(math.log2(loss.shape[0]))):
-            exp_mean_loss.append([i, loss[:min(len(loss), 2**i)].mean()])
-
-        print(exp_mean_loss)
-
-        # import wandb
-        table = wandb.Table(data=exp_mean_loss,
-                            columns=["length", "cross_entropy_loss"])
-        wandb.log({
-            f"validation/loss_curve/{self.real_epoch}/{batch_idx}":
-            wandb.plot.line(table,
-                            "length",
-                            "cross_entropy_loss",
-                            title="Loss Curve"),
-        })
-        self.log('validation/loss', loss.mean())
+        total_loss = self.compute_loss(batch, batch_idx, False)
+        self.log('validation/loss', total_loss, prog_bar=True, sync_dist=True)
+        return total_loss
