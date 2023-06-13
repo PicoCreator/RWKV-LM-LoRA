@@ -384,6 +384,10 @@ class RWKV(L.LightningModule):
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
         seq_mask = batch['attention_mask']
 
+        # Check if attent mask is set, if not initialize it
+        if seq_mask is None or seq_mask.ndim != 2:
+            seq_mask = torch.ones_like(seq[:, 1:])
+        
         if do_cutoff:
             prev_step = 0
             for step, len_cut in zip(self.ctx_len_warmup_steps,
@@ -407,7 +411,7 @@ class RWKV(L.LightningModule):
         B, T = idx.shape
         C = self.n_embd
 
-        def checkpointed_step(idx, targets, prev_loss, last_states,
+        def checkpointed_step(idx, targets, mask, prev_loss, last_states,
                               prev_steps):
             logits, new_states = self(idx, last_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
@@ -431,6 +435,7 @@ class RWKV(L.LightningModule):
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     total_loss,
                     states,
                     steps,
@@ -439,6 +444,7 @@ class RWKV(L.LightningModule):
                 total_loss, states, steps = checkpointed_step(
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     total_loss,
                     states,
                     steps,
