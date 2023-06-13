@@ -44,7 +44,7 @@ async function generateJsonl(outputFilePath, maxWords, numSamples) {
 
 			// This is intentionally biased towards the paragraphMax
 			let paragraph = randomWords({ 
-				min: getRandomInt(paragraphMax/2, paragraphMax), 
+				min: Math.max(1, getRandomInt(paragraphMax/2, paragraphMax)), 
 				max: paragraphMax 
 			});
 

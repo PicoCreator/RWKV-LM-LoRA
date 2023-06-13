@@ -2,6 +2,14 @@
 
 # This script is used to generate the dataset for the project
 
+# Really silly 10 words
+node ./gen_dataset_file.js ./dataset/word-2-count-1k.jsonl 2 1000 &
+node ./gen_dataset_file.js ./dataset/word-5-count-1k.jsonl 2 1000 &
+node ./gen_dataset_file.js ./dataset/word-10-count-1k.jsonl 10 1000 &
+node ./gen_dataset_file.js ./dataset/word-20-count-1k.jsonl 20 1000 &
+node ./gen_dataset_file.js ./dataset/word-40-count-1k.jsonl 40 1000 &
+node ./gen_dataset_file.js ./dataset/word-80-count-1k.jsonl 80 1000 &
+
 # From 100 to 1000 words
 node ./gen_dataset_file.js ./dataset/word-100-count-2k.jsonl 100 2000 &
 node ./gen_dataset_file.js ./dataset/word-200-count-2k.jsonl 200 2000 &
