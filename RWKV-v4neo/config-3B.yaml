@@ -16,7 +16,7 @@ trainer:
       dir: null
       id: null
       anonymous: null
-      project: lightning_logs
+      project: 'RWKV-Memory-Experiment'
       log_model: false
       experiment: null
       prefix: ''
@@ -25,7 +25,7 @@ trainer:
       config: null
       entity: null
       reinit: null
-      tags: null
+      tags: ['RWKV', 'memory-exp']
       group: null
       notes: null
       magic: null
@@ -74,7 +74,7 @@ trainer:
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
-  accumulate_grad_batches: 50
+  accumulate_grad_batches: 100
   gradient_clip_val: 1.0
   gradient_clip_algorithm: null
   deterministic: null
@@ -90,13 +90,15 @@ trainer:
   default_root_dir: null
 model:
   ctx_len: 2048
-  ctx_len_cutoffs: [8000, 81000, 162000]
-  ctx_len_warmup_steps: [0, 0, 0]
+  ctx_len_cutoffs: [8000]
+  ctx_len_warmup_steps: [0]
+  # ctx_len_cutoffs: [8000, 81000, 162000]
+  # ctx_len_warmup_steps: [0, 0, 0]
   n_embd: 2560
   n_layer: 32
   vocab_size: 50277
   grad_cp: true
-  lr_init: 1.0e-05
+  lr_init: 1.0e-04
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99

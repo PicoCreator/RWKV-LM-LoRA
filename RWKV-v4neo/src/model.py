@@ -18,6 +18,7 @@ from lightning.pytorch.strategies import DeepSpeedStrategy
 import deepspeed
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 import deepspeed.runtime.lr_schedules
+import wandb
 
 RWKV_JIT_ON = True
 
@@ -424,12 +425,6 @@ class RWKV(L.LightningModule):
             logits, new_states = self(idx, last_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
                                    targets.view(-1), reduction="none")
-            # # debug logging
-            # print("idx ", idx)
-            # print("targets ", targets)
-            # print("loss ", loss)
-            # print("mask ", mask)
-
             submask = mask.view(-1)[:loss.shape[0]]
             loss = torch.sum(loss * submask) / torch.max(torch.sum(submask), torch.tensor(1, dtype=submask.dtype))
             loss = L2Wrap.apply(loss, logits, B * T)
@@ -465,9 +460,14 @@ class RWKV(L.LightningModule):
                 )
         
         print(f'step {self.global_step}, substep {batch_idx}, real_ctx_len {T}, train/loss {total_loss}')
-        self.log('sub_step', batch_idx)
-        self.log('real_ctx_len', T)
-        self.log('train/loss', total_loss)
+        
+        # self.log('sub_step', batch_idx)
+        # self.log('real_ctx_len', T)
+        # self.log('train/loss', total_loss)
+
+        # Lets log each substep to wandb directly
+        wandb.log({'sub_step': batch_idx, 'real_ctx_len': T, 'train/loss': total_loss, 'trainer/global_step':self.global_step})
+
         return total_loss
 
     def training_step_end(self, batch_parts):
@@ -510,7 +510,7 @@ class RWKV(L.LightningModule):
 
         print(exp_mean_loss)
 
-        import wandb
+        # import wandb
         table = wandb.Table(data=exp_mean_loss,
                             columns=["length", "cross_entropy_loss"])
         wandb.log({
