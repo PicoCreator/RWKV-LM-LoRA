@@ -19,11 +19,17 @@ async function generateJsonl(outputFilePath, maxWords, numSamples) {
 	const writeStream = fs.createWriteStream(filePath);
 
 	const promptTemplates = [
+		"Telephone:\n```\n{{document}}\n```\n\nGame:",
 		"Simon:\n```\n{{document}}\n```\n\nSays:",
 		"Memorize the following document:\n```\n{{document}}```\n\nType it out below:",
 		"Memorise and reply back with the following document:\n```\n{{document}}```\n\nReply:",
+		"Document:\n```\n{{document}}```\n\nReply back with the above document\n\nReply:",
+		"Document:\n```\n{{document}}```\n\nReply back with the previous document\n\nReply:",
 	];
 	const completionTemplates = [
+		"\n```\n{{document}}\n```\n",
+		"\n```\n{{document}}\n```\n",
+		"\n```\n{{document}}\n```\n",
 		"\n```\n{{document}}\n```\n",
 		"\n```\n{{document}}\n```\n",
 		"\n```\n{{document}}\n```\n",
