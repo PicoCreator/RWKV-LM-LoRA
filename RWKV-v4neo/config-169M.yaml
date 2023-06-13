@@ -6,44 +6,44 @@ trainer:
   devices: 1
   num_nodes: 1
   precision: bf16
-  logger:
-    class_path: lightning.pytorch.loggers.WandbLogger
-    init_args:
-      name: null
-      save_dir: .
-      version: null
-      offline: false
-      dir: null
-      id: null
-      anonymous: null
-      project: lightning_logs
-      log_model: false
-      experiment: null
-      prefix: ''
-      checkpoint_name: null
-      job_type: null
-      config: null
-      entity: null
-      reinit: null
-      tags: null
-      group: null
-      notes: null
-      magic: null
-      config_exclude_keys: null
-      config_include_keys: null
-      mode: null
-      allow_val_change: null
-      resume: null
-      force: null
-      tensorboard: null
-      sync_tensorboard: null
-      monitor_gym: null
-      save_code: null
-      settings: null
+  # logger:
+  #   class_path: lightning.pytorch.loggers.WandbLogger
+  #   init_args:
+  #     name: null
+  #     save_dir: .
+  #     version: null
+  #     offline: false
+  #     dir: null
+  #     id: null
+  #     anonymous: null
+  #     project: lightning_logs
+  #     log_model: false
+  #     experiment: null
+  #     prefix: ''
+  #     checkpoint_name: null
+  #     job_type: null
+  #     config: null
+  #     entity: null
+  #     reinit: null
+  #     tags: null
+  #     group: null
+  #     notes: null
+  #     magic: null
+  #     config_exclude_keys: null
+  #     config_include_keys: null
+  #     mode: null
+  #     allow_val_change: null
+  #     resume: null
+  #     force: null
+  #     tensorboard: null
+  #     sync_tensorboard: null
+  #     monitor_gym: null
+  #     save_code: null
+  #     settings: null
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: pile-10k-ckpt
+      dirpath: /home/ubuntu/RWKV-LM-LoRA/checkpoint/
       filename: null
       monitor: null
       verbose: false
@@ -57,7 +57,7 @@ trainer:
       every_n_epochs: null
       save_on_train_epoch_end: null
   fast_dev_run: false
-  max_epochs: -1
+  max_epochs: 1
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -104,9 +104,9 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  load_model: /home/blealtancao/rwkv-models/RWKV-4-Pile-169M-20220807-8023.pth
+  load_model: /home/ubuntu/RWKV-LM-LoRA/model/RWKV-4-Pile-169M-20220807-8023.pth
 data:
-  data_path: ./pile-10k-data
-  source: null
-  tokenizer: null
+  data_path: /home/ubuntu/RWKV-LM-LoRA/data_path/
+  source: /home/ubuntu/RWKV-LM-LoRA/dataset/
+  tokenizer: /home/ubuntu/RWKV-LM-LoRA//RWKV-v4neo/20B_tokenizer.json
 ckpt_path: null

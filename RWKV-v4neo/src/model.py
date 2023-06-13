@@ -381,8 +381,10 @@ class RWKV(L.LightningModule):
 
     def compute_loss(self, batch, batch_idx, do_cutoff: bool):
         seq = batch['input_ids']
-        assert isinstance(seq, torch.Tensor) and seq.ndim == 2
         seq_mask = batch['attention_mask']
+
+        # Check if input_ids contain the valid idx, target pair
+        assert isinstance(seq, torch.Tensor) and seq.ndim == 2
 
         # Check if attent mask is set, if not initialize it
         if seq_mask is None or seq_mask.ndim != 2:
@@ -449,7 +451,7 @@ class RWKV(L.LightningModule):
                     states,
                     steps,
                 )
-
+                
         # @TODO : Figure out how to check if wandb is enabled, and skip the wandb log accordingly
         wandb.log({'substep': batch_idx, 'real_ctx_len': T, 'train/loss': total_loss, 'trainer/global_step':self.global_step})
 

@@ -141,3 +141,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Experimental changes
+checkpoint/
+dataset/
+model/
+data_path/
+node_modules/
+!*.sh
