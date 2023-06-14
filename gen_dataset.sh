@@ -22,8 +22,8 @@ node ./gen_dataset_file.js ./dataset/word-800-count-2k.jsonl 800 2000 &
 node ./gen_dataset_file.js ./dataset/word-900-count-2k.jsonl 900 2000 &
 
 # From 1k, to 2k
-node ./gen_dataset_file.js ./dataset/word-1k-count-3k.jsonl 1000 3000 &
-node ./gen_dataset_file.js ./dataset/word-2k-count-3k.jsonl 2000 3000 &
+node ./gen_dataset_file.js ./dataset/word-1k-count-5k.jsonl 1000 5000 &
+node ./gen_dataset_file.js ./dataset/word-2k-count-5k.jsonl 2000 5000 &
 
 # # From 1000 to 10000 words
 # node ./gen_dataset_file.js ./dataset/word-1k-count-1k.jsonl 1000 1000 &
