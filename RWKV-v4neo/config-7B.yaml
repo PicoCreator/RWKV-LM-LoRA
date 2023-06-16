@@ -6,44 +6,44 @@ trainer:
   devices: 1
   num_nodes: 1
   precision: bf16
-  # logger:
-  #   class_path: lightning.pytorch.loggers.WandbLogger
-  #   init_args:
-  #     name: null
-  #     save_dir: .
-  #     version: null
-  #     offline: false
-  #     dir: null
-  #     id: null
-  #     anonymous: null
-  #     project: lightning_logs
-  #     log_model: false
-  #     experiment: null
-  #     prefix: ''
-  #     checkpoint_name: null
-  #     job_type: null
-  #     config: null
-  #     entity: null
-  #     reinit: null
-  #     tags: null
-  #     group: null
-  #     notes: null
-  #     magic: null
-  #     config_exclude_keys: null
-  #     config_include_keys: null
-  #     mode: null
-  #     allow_val_change: null
-  #     resume: null
-  #     force: null
-  #     tensorboard: null
-  #     sync_tensorboard: null
-  #     monitor_gym: null
-  #     save_code: null
-  #     settings: null
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      name: null
+      save_dir: .
+      version: null
+      offline: false
+      dir: null
+      id: null
+      anonymous: null
+      project: 'RWKV-Memory-Experiment'
+      log_model: false
+      experiment: null
+      prefix: ''
+      checkpoint_name: null
+      job_type: null
+      config: null
+      entity: null
+      reinit: null
+      tags: ['RWKV', 'memory-exp']
+      group: null
+      notes: null
+      magic: null
+      config_exclude_keys: null
+      config_include_keys: null
+      mode: null
+      allow_val_change: null
+      resume: null
+      force: null
+      tensorboard: null
+      sync_tensorboard: null
+      monitor_gym: null
+      save_code: null
+      settings: null
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: /home/blealtancao/rwkv-models/pile-10k-ckpt
+      dirpath: /home/ubuntu/RWKV-LM-LoRA/checkpoint/
       filename: null
       monitor: null
       verbose: false
@@ -52,7 +52,7 @@ trainer:
       save_weights_only: false
       mode: min
       auto_insert_metric_name: true
-      every_n_train_steps: 100
+      every_n_train_steps: 10
       train_time_interval: null
       every_n_epochs: null
       save_on_train_epoch_end: null
@@ -74,7 +74,7 @@ trainer:
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
-  accumulate_grad_batches: 1
+  accumulate_grad_batches: 128
   gradient_clip_val: 1.0
   gradient_clip_algorithm: null
   deterministic: null
@@ -89,9 +89,9 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: null
 model:
-  ctx_len: 2048
-  ctx_len_cutoffs: [8192, 16384, 32768, 65536]
-  ctx_len_warmup_steps: [100, 200, 500, 1000]
+  ctx_len: 512
+  ctx_len_cutoffs: [8192]
+  ctx_len_warmup_steps: [0]
   n_embd: 4096
   n_layer: 32
   vocab_size: 50277
