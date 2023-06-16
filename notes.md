@@ -12,6 +12,9 @@ python -m pip install ninja numexpr jsonargparse 'jsonargparse[signatures]'
 python -m pip install lm-dataformat ftfy sentencepiece tokenizers
 python -m pip install wandb
 
+# For running the eval test
+python -m pip install rwkv
+
 # conda install pip
 # pip install numexpr
 # pip install lightning['extra']
