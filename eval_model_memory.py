@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
+import difflib
 
 #---
 # Given the RWKV model path
@@ -21,6 +22,7 @@ os.environ["RWKV_CUDA_ON"] = '1' # '1' to compile CUDA kernel (10x faster), requ
 
 from rwkv.model import RWKV
 from rwkv.utils import PIPELINE
+from rwkv.utils import PIPELINE_ARGS
 
 # Model strategy to use
 # model_run_strat='cpu fp32' # CPU only, use if you dun have a GPU
@@ -32,8 +34,23 @@ model_path = sys.argv[1]
 model = RWKV(model=model_path, strategy=model_run_strat)
 pipeline = PIPELINE(model, "./RWKV-v4neo/20B_tokenizer.json") # 20B_tokenizer.json is in https://github.com/BlinkDL/ChatRWKV
 
-# Random test word list (we could RNG this)
-test_word_list='adjective we shallow become steady here phrase poetry carry respect afraid threw positive century principal join wall he appearance everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital principal orbit than explore fully help discover knew diameter return appropriate world stuck seen not review stand\n\nattempt bush just look leave fight war troops difficulty chose or cat studying forward recently laugh them studied immediately won increase scene prove gradually arrive lost population quickly wrapped subject soap zero trail brother spring goose add action detail heavy grain leather smooth gold canal ants outer dull family affect syllable frighten brain search wave promised exercise strip regular coal until listen aside law realize sing keep away half speed sort carry earn paint such stems share quarter inside lose struggle smoke quite your warn throat white thirty sign stranger slow grabbed life enemy upward whispered\n\nselection about student task finish molecular gift shine type interest came nor fine various prize lamp disease most stay was silent fog safe railroad customs coal orbit car softly soon area stick past grown usually ill die must paid date curious string feathers win cow terrible bowl treated root straight double divide mile parts birth service yesterday clear topic fear exact arm earth war volume rear extra tight people bean fastened fighting black sing saw small phrase doctor population whispered third disease carbon spent trap fun pictured name wonder finest fire police truck\n\neither war branch honor purple older meet rising ran wash dinner changing left sure win lie rabbit mad frequently women seven writer chamber tired mathematics human tall hall notice village end mother clean cattle log remain table tie chapter bark plates shelf our circus hello fastened completely principle someone them hollow certainly hundred hurried tip further cattle element aware swimming exactly division radio valley consider solve current leaving signal fully immediately mainly move grew move eventually friendly grass somehow also spite fierce chose local struck fish this clock asleep\n\nway struggle movie easy shine outside way kept needle older shown promised studied pan dug hunter slow cross plates highest army saved held its hall manner between invented merely shirt fierce chosen home onto interest us also touch theory join occasionally instance careful snake variety trace close double lower boat planned square beat excitement because long population value usually sense nails separate smoke such war waste many box bridge raise area temperature stopped according attack sound valuable send loud birthday block trip off congress chapter fly battle great behavior ride shake was pour danger flower round subject law palace bean\n\njoin hardly mission she six repeat letter disappear government leader voyage willing society top steady factor plan well off this square peace silly tea ocean alike examine clean planned farmer statement necessary yellow arrangement badly somehow fear cutting noise poetry wolf path willing earn leg put told lower give refer cattle broke hello range direct track suddenly early poet year care rise year plane\n\nfully nice correct saddle story upper stronger depend bound easy she ship sunlight string street terrible wing stood that until seems oxygen danger finger courage nodded tin men headed hung birthday fairly lucky across stretch determine immediately saw next earlier honor stood brought stiff aware announced smile ball shout very hearing effect lead he count compound west pattern made hurry railroad sense stone occur mixture stared movie visit themselves had dropped birthday invented made like write firm mile tales\n\nleast wash fairly about bus radio fine easy spirit size hill exercise four positive fight drawn read somehow noted teeth hair quickly principal longer excitement easily doll city special silver bigger obtain have examine uncle attempt pilot public mix band human plastic please drove actually nails log doing owner remarkable breeze chart skill noun crop wall of due biggest proper stronger model sheep frequently stop discover like smell which three event gravity congress chosen refer die onto sad about joy between border suit gray\n\nwhile stood feed ten replace done sand industry nearest heading blew across satellites swam donkey speech full equal package specific public stranger came cold cheese minerals rich engine chemical student some hardly birthday bush enemy above strip pencil alive understanding greatly favorite over weather given report thy famous musical agree fur upper from medicine yesterday entire along usually vegetable young tight pretty object brush struggle eventually pan church immediately private distance audience away aid river sleep burn some tower won color myself handsome well recent mouth everyone lion scale hope lucky season\n\nlonely offer sing closely locate report screen pile five second straw necessary after night serious decide uncle bat substance eventually for tight nor shape example experiment this captured satisfied baby wind bet leg seven late until hurried opportunity private title phrase halfway add unusual worried disease shape hollow frame silver occasionally massage noun goes mathematics course accident invented man apart load fall lunch whenever blood eaten carefully straw job want luck jump ahead split burst lower chose spring tiny replace month language leg hospital trade behind shake up frighten scared equal rubbed pie desk\n\npoliceman pack fastened stopped careful seems bottom donkey wind clearly poem operation please bow expect orbit smell finally provide model guard pick muscle sugar solar detail whale under tape flag compare struggle beautiful impossible farm examine trace cast gather attempt record shot yourself run perfectly neck alive hill enemy purpose must equally verb source creature morning of official believed road own powder open care foreign next individual hair look office means spin fun he individual\n\ngrowth sum pay knew flag select toy fear chest pleasure joined forgot respect window course serious applied compound lovely tiny easily expression shelf fire nodded important told perfect eager sat around human too grade discover sing nine could happened appearance past fresh state love glass why already strong fastened stood naturally ready shirt automobile state task would but smoke cell shot cent combination choose metal dropped lead clothes oil trade up gone nine matter wide capital rope difficulty dawn fruit per\n\nkey circus movement safety keep biggest pig mass putting charge handsome pale join door vast dozen serve best freedom even children traffic prevent base ground vessels solid interest lead oxygen kitchen bound specific pass fruit strike seven plenty remain forth purpose mighty short asleep radio became ill club clean perfect doll piano firm fifth ever heat folks bring find tube realize outline four closely seen circus hour damage pictured better property telephone current must flag industrial talk eaten relationship board will tower look grass willing zipper remove hunter recent fell sell sold slave bar diameter passage paragraph\n\ncontain strip person particular village thin particles represent anything experience coach southern habit moment short hurried were golden automobile stranger lesson darkness black brother same compound wagon earlier stuck even differ waste expression giving hurry married fear supper member operation fifth son treated taste jet slabs drawn lift east truth stream cloth guard while roof rather meat anything understanding whale owner figure coat western heart cell gray church lying sang action black actual greater silk face run however metal tonight dawn everybody discovery warm label movement slow clothing somebody\n\nframe trace musical list did satisfied burst behind slave key principal long chose hung scientist kids combination red war electric sink alphabet anyone treated food hurry blue newspaper at growth shown gave sky electricity sleep blank type mean difficult short mad gasoline cry brief even century help road corn torn driver involved elephant underline wall skill usual settlers fair myself syllable troops neck outer anybody pupil planet due kids leg yellow indicate she folks figure warm main means due cap weight indeed himself furniture pony addition within spend rain so into consist friend control unless eat before dark meet\n\nplane nearest seat soon calm mass party knowledge saved leave season sit orange eleven giving happened join snow born labor along law mile reader walk queen greatest differ wool new west cowboy ill position company journey leaving success twelve finest widely pay greater correctly former entire meant needed story answer club written screen sail declared verb black rabbit think symbol steam live leave point identity twenty situation wolf weigh century cheese shorter low stopped lion occasionally mice out all wolf split gain locate scared ran opinion lady section topic queen\n\nlight struck block effort ice figure flower home allow swing common influence worse storm blood citizen oxygen occasionally discover beside strength walk mysterious vapor hunter mistake construction cool these earn airplane dull fireplace straight stomach brick family behavior dull talk religious driver fur additional trip poet label subject useful sharp without themselves club happy given bark instant hold somewhere manner sister many town original particularly student evening somebody fix cotton independent nothing wild mission return dear refused them answer duty children information musical fuel eat could studied soil tie fellow farther telephone habit please thin certainly will composed spoken\n\nwealth engine worried everything company nearby swim belt unhappy slow range label past breathing plant length including not handsome then slowly butter rod parallel fresh ten energy art lake wherever dark customs yellow eager along loose airplane limited putting serve want title mice breathing mood frame trick poet hot beside diagram smoke student leave diameter quiet activity not post carefully send she inside likely luck row scientific tales there putting party parts studying cream limited water satisfied rhythm powerful camera shop under funny call simply box dinner like unhappy muscle mistake receive finally hidden lungs journey color author\n\nbrain shelter join pipe glass children claws please women pay blue danger announced excited cap chair fox lovely hole balance ice eat capital difficulty pain produce butter board diameter promised solar next coming porch mice union neighborhood oxygen lot industry thin needle know exactly appropriate careful cell getting feed asleep softly selection speak particularly fight ride canal unit cream pure zero widely afternoon contrast suddenly development\n\nfrom flag proper task world round sand differ means nodded blank add thread heart report consider general been ourselves finest bend save plane add please month state goes proud south sale sheep classroom additional meat usually problem went boy darkness that thou flat whistle planet price shells week said mill experience lying slave thou getting replied pocket biggest section continued ordinary able story universe farmer drove stared zero market bell breeze ourselves promised industrial sit honor perfectly frighten difference call south riding nervous hurry solution mail second solid slabs'
+# Get the cursed " on" token
+on_token = pipeline.encode(" on")[0]
+markdwon_token = pipeline.encode("```")[0]
+
+# Pipeline args to use
+pipeline_args = PIPELINE_ARGS(
+                     temperature = 0.2, top_p = 0.2, 
+                     top_k = 1, # top_k = 0 then ignore
+                     alpha_frequency = 0,
+                     alpha_presence = 0,
+                     token_ban = [on_token], # ban the generation of some tokens
+                     token_stop = [markdwon_token], # stop generation whenever you see any token here
+                     chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
+
+# Read the test word list, taken from ./eval_word_list.txt
+with open('./eval_word_list.txt', 'r') as f:
+    test_word_list = f.read()
 
 # Convert it to tokens
 test_word_tokens = pipeline.encode(test_word_list)
@@ -49,3 +66,62 @@ def get_words_with_token_count(token_count):
     return target_words
 
 # Function for validating once the model at a specific token count
+def validate_model(token_count):
+    target_words = get_words_with_token_count(token_count)
+    prompt = prompt_prefix + "\n```\n" + target_words + "\n```\n\n" + completion_prefix + "\n```\n"
+
+    # Generate the completion
+    gen_tokens = round(token_count * 1.5)
+    completion = pipeline.generate(prompt, token_count=gen_tokens, args=pipeline_args)
+
+    # Trim the target words of starting and ending spaces
+    target_words = target_words.strip()
+
+    # Split using "```" as the delimiter the completion
+    completion = completion.split("```")[0].strip()
+
+    # Get the similarity between the target words and the completion
+    sm = difflib.SequenceMatcher(None, target_words, completion)
+    similarity = sm.ratio()
+    char_diff_count = len(target_words) + len(completion) - 2 * int(similarity * (len(target_words) + len(completion)) / 2)
+
+    # Print the results
+    print("=============")
+    print(f'Model validation at {token_count} tokens : {similarity * 100}% similarity, {char_diff_count} char diff')
+
+    # Print more info if there are differences
+    if(char_diff_count > 0):
+        print("---   target   ---")
+        print(target_words)
+        print("--- completion ---")
+        print(completion)
+        print("------------------")
+
+# Print the start of model validation
+print("")
+print("### Model validation start ###")
+
+# Validate the model at different token counts
+validate_model(5)
+validate_model(10)
+validate_model(15)
+validate_model(20)
+validate_model(25)
+validate_model(30)
+validate_model(35)
+validate_model(40)
+validate_model(45)
+validate_model(50)
+validate_model(55)
+validate_model(60)
+validate_model(65)
+validate_model(70)
+validate_model(100)
+# validate_model(200)
+# validate_model(300)
+# validate_model(400)
+# validate_model(600)
+# validate_model(700)
+# validate_model(800)
+# validate_model(900)
+# validate_model(1000)
