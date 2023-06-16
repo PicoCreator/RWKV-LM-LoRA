@@ -6,7 +6,7 @@ This test the extremes of RWKV memory with random words, where there is NO patte
 
 For example, users have shown RWKV to rewrite letters / answer Q&A with reference materials / etc with larger context sizes then what is provided here
 
-You can think of this as at best, how much "compressed" knowledge can RWKV memorize.
+You can think of this as at best, how much "compressed" knowledge can RWKV memorize. Or alternatively how much RWKV can store in the extream worse case scenerio
 
 For example you as a human have a much easier time roughly memorizing a 500 word story, in approximate, then 50 words randomly chosen with no pattern.
 

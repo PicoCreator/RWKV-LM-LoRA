@@ -106,8 +106,8 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  # load_model: /home/ubuntu/RWKV-LM-LoRA/model/RWKV-4-Raven-3B-v12-Eng98%-Other2%-20230520-ctx4096.pth
-  load_model: /home/ubuntu/RWKV-LM-LoRA/build/RWKV-3B-Telephone-Game-R3.bin
+  load_model: /home/ubuntu/RWKV-LM-LoRA/model/RWKV-4-Raven-3B-v12-Eng98%-Other2%-20230520-ctx4096.pth
+  # load_model: /home/ubuntu/RWKV-LM-LoRA/build/RWKV-3B-Telephone-Game-R3.bin
 data:
   data_path: /home/ubuntu/RWKV-LM-LoRA/data_path/
   source: /home/ubuntu/RWKV-LM-LoRA/dataset/
