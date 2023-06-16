@@ -1,4 +1,3 @@
-### Model validation start ###
 =============
 Model validation at 5 tokens : 100.0% similarity, 0 char diff
 =============
@@ -36,6 +35,13 @@ adjective we shallow become steady phrase poetry carry respect afraid threw posi
 adjective we shallow become steady phrase poetry carry respect afraid thrown pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because
 ------------------
 =============
+Model validation at 45 tokens : 97.57785467128028% similarity, 14 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive hundred principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage
+------------------
+=============
 Model validation at 50 tokens : 97.8328173374613% similarity, 14 char diff
 ---   target   ---
 adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline
@@ -43,11 +49,25 @@ adjective we shallow become steady phrase poetry carry respect afraid threw posi
 adjective we shallow become steady phrase poetry carry respect afraid threw positive hundred principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline
 ------------------
 =============
+Model validation at 55 tokens : 36.98030634573304% similarity, 576 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive hundred stage composed afternoon fall underline personal carried alone wonder card orbit because simply busy nearer nothing stage compose afternoon rough indicate answer tell wonder join snow build imagine better rough indicate answer tell wonder join snow build imagine better rough indicate answer tell wonder solve allow fish kitchen snow build imagine better rough indicate answer tell tonight solve allow fish kitchen snow build imagine better rough indicate
+------------------
+=============
 Model validation at 60 tokens : 36.656596173212485% similarity, 629 char diff
 ---   target   ---
 adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first
 --- completion ---
 adjective we shallow become steady phrase poetry carry respect afraid throw positive hundred principal pair tonight solve allowed positive hundred orbit because simply busy nearer nothing stage composed afternoon fell underline personal carry alone wonder card orbit because simply busy nowhere this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder stage composed afternoon fall underline regular function blue
+------------------
+=============
+Model validation at 65 tokens : 24.0% similarity, 551 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive hundred stage compose afternoon fall underline personal build imagine better rough indicate answer tell wonder card orbit because simply busy nowhere nothing blue crack first unknown local total pie audience
 ------------------
 =============
 Model validation at 70 tokens : 24.501424501424502% similarity, 530 char diff
