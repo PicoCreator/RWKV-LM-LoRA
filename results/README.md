@@ -10,6 +10,8 @@ You can think of this as at best, how much "compressed" knowledge can RWKV memor
 
 For example you as a human have a much easier time roughly memorizing a 500 word story, in approximate, then 50 words randomly chosen with no pattern.
 
+Finally this is using a new finetune process which may have bugs, and the testing/training methodology may have flaws that needs to be refined.
+
 **Experiment note:**
 
 For some reason reason the finetuned model goes crazy once it encounters the " on" token, i have blocked this token, and removed it from the test data.
@@ -18,7 +20,7 @@ Training loss has a lower result probably because, it would "correct" the infere
 
 The "poor man eval" script can be found at `../eval_model_memory.py`
 
-Non finetuned model is also at a disadvantage, due to the 0-shot nature of the process
+Raven / Non finetuned model is also at a disadvantage, due to the 0-shot nature of the process
 
 ## RWKV 3B memory results
 

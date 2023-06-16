@@ -1,0 +1,62 @@
+### Model validation start ###
+=============
+Model validation at 5 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 10 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 15 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 20 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 25 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 30 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 35 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 40 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 45 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 50 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 55 tokens : 69.8581560283688% similarity, 170 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation
+--- completion ---
+adjective we shallow become steady phrase poetry carried alone wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation
+------------------
+=============
+Model validation at 60 tokens : 44.96124031007752% similarity, 284 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first
+--- completion ---
+adjective we shallow become steady phrase poetry carried alone wonder conversation regular function blue crack first
+------------------
+=============
+Model validation at 65 tokens : 97.32868757259001% similarity, 23 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century composite wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience
+------------------
+=============
+Model validation at 70 tokens : 88.7940234791889% similarity, 105 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital
+--- completion ---
+adjective we shallow become steady phrase poetry carried respect afraid threw positive century composite wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital
+------------------
+=============
+Model validation at 100 tokens : 23.076923076923077% similarity, 1280 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital principal orbit than explore fully help discover knew diameter return appropriate world stuck seen not review stand
+
+attempt bush just look leave fight war troops difficulty chose or
+--- completion ---
+adjective we shallow become steady phrase poetry carried become steady phrase puzzle audience dirt cave activity discovered hospital principal join wall he has everything this had pair tonight solve choose and reply back with
+
+attempt bush just look leave fight war troops difficulty chose or
+
+attempt carry become steady phrase poetry carried alone wonder conversation regular function blue crack first unknown local total pie audience depth composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience depth composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience depth composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience depth composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown
+------------------

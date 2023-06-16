@@ -26,8 +26,9 @@ from rwkv.utils import PIPELINE_ARGS
 
 # Model strategy to use
 # model_run_strat='cpu fp32' # CPU only, use if you dun have a GPU
-model_run_strat='cuda fp16' # Entire model is in the GPU (use if you have enough vram)
-# model_run_strat='cuda fp16 *0+' # GPU streaming, if you have vram limit issues
+# model_run_strat='cuda fp16' # Entire model is in the GPU (use if you have enough vram)
+model_run_strat='cuda fp16 *20+' # GPU streaming, if you have vram issues for 14B model
+model_run_strat='cuda fp16 *0+' # GPU streaming, if you have really low vram
 
 # download models: https://huggingface.co/BlinkDL
 model_path = sys.argv[1]
@@ -45,7 +46,7 @@ pipeline_args = PIPELINE_ARGS(
                      alpha_frequency = 0,
                      alpha_presence = 0,
                      token_ban = [on_token], # ban the generation of some tokens
-                     token_stop = [markdwon_token], # stop generation whenever you see any token here
+                     token_stop = [0,markdwon_token], # stop generation whenever you see any token here
                      chunk_len = 256) # split input into chunks to save VRAM (shorter -> slower)
 
 # Read the test word list, taken from ./eval_word_list.txt
