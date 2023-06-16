@@ -45,4 +45,4 @@ Raven / Non finetuned model is also at a disadvantage, due to the 0-shot nature 
 
 **Native raven 7B**
 - perfect memory until 50 tokens
-- drop off after 50 5okens
+- drop off after 50 tokens

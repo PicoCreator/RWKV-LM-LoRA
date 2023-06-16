@@ -26,9 +26,9 @@ from rwkv.utils import PIPELINE_ARGS
 
 # Model strategy to use
 # model_run_strat='cpu fp32' # CPU only, use if you dun have a GPU
-# model_run_strat='cuda fp16' # Entire model is in the GPU (use if you have enough vram)
-model_run_strat='cuda fp16 *20+' # GPU streaming, if you have vram issues for 14B model
-model_run_strat='cuda fp16 *0+' # GPU streaming, if you have really low vram
+model_run_strat='cuda fp16' # Entire model is in the GPU (use if you have enough vram)
+# model_run_strat='cuda fp16 *20+' # GPU streaming, if you have vram issues for 14B model
+# model_run_strat='cuda fp16 *0+' # GPU streaming, if you have really low vram
 
 # download models: https://huggingface.co/BlinkDL
 model_path = sys.argv[1]
@@ -64,6 +64,10 @@ completion_prefix = "Reply:"
 def get_words_with_token_count(token_count):
     target_tokens = test_word_tokens[:token_count]
     target_words = pipeline.decode(target_tokens)
+    
+    # Normalize to lowercase
+    target_words = target_words.lower()
+
     return target_words
 
 # Function for validating once the model at a specific token count
