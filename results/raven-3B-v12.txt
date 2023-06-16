@@ -1,0 +1,105 @@
+### Model validation start ###
+=============
+Model validation at 5 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 10 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 15 tokens : 95.56650246305419% similarity, 9 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal
+--- completion ---
+adjective we shallow become steady poem poetry carry respect afraid thrown positive century principal
+------------------
+=============
+Model validation at 20 tokens : 96.52509652509652% similarity, 9 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything
+--- completion ---
+adjective we shallow become steady poem poetry carry respect afraid thrown positive century principal join wall he has everything
+------------------
+=============
+Model validation at 25 tokens : 99.05362776025235% similarity, 3 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid thrown positive century principal join wall he has everything this had pair tonight solve
+------------------
+=============
+Model validation at 30 tokens : 99.20424403183023% similarity, 3 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid thrown positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build
+------------------
+=============
+Model validation at 35 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 40 tokens : 91.56118143459916% similarity, 40 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid throw positive century principal join wall he has everything this had pair tonight solve better rough indicate answer tell wonder card orbit because
+------------------
+=============
+Model validation at 50 tokens : 62.65356265356266% similarity, 304 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid thrown negative century principal join wall he has everything this had pair kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy tonight solve better rough indicate answer tell wonder card orbit because simply busy tonight resolve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy tonight resolve allow fish kitchen
+------------------
+=============
+Model validation at 60 tokens : 19.88472622478386% similarity, 556 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect adjective we shallow become steady poem kitchen snow build tell wonder card orbit because simply busy tonight solve better fall underline personal carried alone thrown nothing stage composed better regular function blue crack first
+------------------
+=============
+Model validation at 70 tokens : 14.285714285714285% similarity, 660 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital
+--- completion ---
+adjective we shallow become steady phrase poem
+card
+orchestra
+dance
+carry
+respect
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+advance
+ad
+------------------
+=============
+Model validation at 100 tokens : 15.272136474411047% similarity, 1045 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital principal orbit than explore fully help discover knew diameter return appropriate world stuck seen not review stand
+
+attempt bush just look leave fight war troops difficulty chose or
+--- completion ---
+adjective we shallow become brave tough solve better fall underline principal join wall he has everything this had pair sentence review best bush regular function blue crack first unknown local total pie audience dirt cave activity discovered document dust carry nothing stage imagined better rough indicate answer tell wonder card orbit than explore fallen entirely kitchen snow build nothing choice positive century principal return this had pair sentence resolve appropriate function blue crack first unknown local total pie audience nervous carry everything this had nothing
+------------------

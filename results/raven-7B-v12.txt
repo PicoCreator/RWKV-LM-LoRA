@@ -1,0 +1,67 @@
+### Model validation start ###
+=============
+Model validation at 5 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 10 tokens : 70.83333333333334% similarity, 28 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect
+--- completion ---
+adjective we shallow become steady
+------------------
+=============
+Model validation at 15 tokens : 50.0% similarity, 68 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal
+--- completion ---
+adjective we shallow become steady
+------------------
+=============
+Model validation at 20 tokens : 41.46341463414634% similarity, 96 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything
+--- completion ---
+adjective we shallow become steady
+------------------
+=============
+Model validation at 25 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 30 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 35 tokens : 100.0% similarity, 0 char diff
+=============
+Model validation at 40 tokens : 85.52338530066815% similarity, 65 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid thrown pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because
+------------------
+=============
+Model validation at 50 tokens : 97.8328173374613% similarity, 14 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive hundred principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline
+------------------
+=============
+Model validation at 60 tokens : 36.656596173212485% similarity, 629 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid throw positive hundred principal pair tonight solve allowed positive hundred orbit because simply busy nearer nothing stage composed afternoon fell underline personal carry alone wonder card orbit because simply busy nowhere this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder stage composed afternoon fall underline regular function blue
+------------------
+=============
+Model validation at 70 tokens : 24.501424501424502% similarity, 530 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid throw positive hundred stage compose afternoon fell underline personal carry alone wonder card orbit because simply busy replied back with the following document:
+------------------
+=============
+Model validation at 100 tokens : 16.532721010332953% similarity, 727 char diff
+---   target   ---
+adjective we shallow become steady phrase poetry carry respect afraid threw positive century principal join wall he has everything this had pair tonight solve allow fish kitchen snow build imagine better rough indicate answer tell wonder card orbit because simply busy nearer nothing stage composed afternoon fall underline personal carried alone wonder conversation regular function blue crack first unknown local total pie audience dirt cave activity discover hospital principal orbit than explore fully help discover knew diameter return appropriate world stuck seen not review stand
+
+attempt bush just look leave fight war troops difficulty chose or
+--- completion ---
+adjective we shallow become steady phrase poetry carry respect afraid afraid allow fish kitchen wall he has everything this had pair tonight solve better rough indicate answer leave fight war troops difficulty chose or
+------------------

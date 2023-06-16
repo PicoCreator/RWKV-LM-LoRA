@@ -149,3 +149,5 @@ model/
 data_path/
 node_modules/
 !*.sh
+!eval_word_list.txt
+!results/*.txt
