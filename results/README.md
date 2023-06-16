@@ -8,11 +8,17 @@ For example, users have shown RWKV to rewrite letters / answer Q&A with referenc
 
 You can think of this as at best, how much "compressed" knowledge can RWKV memorize.
 
+For example you as a human have a much easier time roughly memorizing a 500 word story, in approximate, then 50 words randomly chosen with no pattern.
+
 **Experiment note:**
 
 For some reason reason the finetuned model goes crazy once it encounters the " on" token, i have blocked this token, and removed it from the test data.
 
 Training loss has a lower result probably because, it would "correct" the inference when a token goes wrong, helping its associative memories stay on track better (instead of drastically going off the rails potentially here)
+
+The "poor man eval" script can be found at `../eval_model_memory.py`
+
+Non finetuned model is also at a disadvantage, due to the 0-shot nature of the process
 
 ## RWKV 3B memory results
 
@@ -32,3 +38,9 @@ Training loss has a lower result probably because, it would "correct" the infere
 - perfect memory from 25-35 tokens
 - minor 1 to 3 word drop from 40-50 tokens
 - major drop after 50 tokens
+
+## RWKV 14B memory results
+
+**Native raven 7B**
+- perfect memory until 50 tokens
+- drop off after 50 5okens
