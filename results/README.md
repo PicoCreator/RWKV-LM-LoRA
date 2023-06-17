@@ -16,11 +16,10 @@ Finally this is using a new finetune process which may have bugs, and the testin
 
 For some reason reason the finetuned model goes crazy once it encounters the " on" token, i have blocked this token, and removed it from the test data.
 
-Training loss has a lower result probably because, it would "correct" the inference when a token goes wrong, helping its associative memories stay on track better (instead of drastically going off the rails potentially here)
+The eval script can be found at `eval_model_memory_guided.py`, for more details of the whole memory test process you can see the `experiment-process.md`
 
-The "poor man eval" script can be found at `../eval_model_memory.py`
-
-Raven / Non finetuned model is also at a disadvantage, due to the 0-shot nature of the process
+The guided eval script, uses the memory task prompt that raven was trained with. It also "auto-correct" the evaluation process with the correct token, and measure where it failed.
+This helps trigger, the weaker associative memories, even if the model accidentally fall off track early (instead of being permenantly off the rails), while this means the matched token score might be slightly higher then actual day-to-day use, it is also a more accurate measurement of the model overall memory capacity.
 
 ## RWKV 3B memory results
 

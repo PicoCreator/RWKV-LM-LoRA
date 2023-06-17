@@ -27,8 +27,8 @@ from rwkv.utils import PIPELINE_ARGS
 
 # Model strategy to use
 # model_run_strat='cpu fp32' # CPU only, use if you dun have a GPU
-# model_run_strat='cuda fp16' # Entire model is in the GPU (use if you have enough vram)
-model_run_strat='cuda fp16 *30+' # GPU streaming, if you have vram issues for 14B model
+model_run_strat='cuda fp16' # Entire model is in the GPU (use if you have enough vram)
+# model_run_strat='cuda fp16 *30+' # GPU streaming, if you have vram issues for 14B model
 # model_run_strat='cuda fp16 *0+' # GPU streaming, if you have really low vram
 
 # download models: https://huggingface.co/BlinkDL

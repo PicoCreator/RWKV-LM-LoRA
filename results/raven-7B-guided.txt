@@ -1,0 +1,46 @@
+###
+### Model validation start ###
+###
+Model validation at 5 tokens : 100.0% similarity, with 5 matched token, and 0 token mismatch
+Model validation at 10 tokens : 100.0% similarity, with 10 matched token, and 0 token mismatch
+Model validation at 15 tokens : 100.0% similarity, with 15 matched token, and 0 token mismatch
+Model validation at 20 tokens : 100.0% similarity, with 20 matched token, and 0 token mismatch
+Model validation at 25 tokens : 100.0% similarity, with 25 matched token, and 0 token mismatch
+Model validation at 30 tokens : 100.0% similarity, with 30 matched token, and 0 token mismatch
+Model validation at 35 tokens : 100.0% similarity, with 35 matched token, and 0 token mismatch
+Model validation at 40 tokens : 97.5% similarity, with 39 matched token, and 1 token mismatch
+Model validation at 45 tokens : 97.77777777777777% similarity, with 44 matched token, and 1 token mismatch
+Model validation at 50 tokens : 100.0% similarity, with 50 matched token, and 0 token mismatch
+Model validation at 55 tokens : 96.36363636363636% similarity, with 53 matched token, and 2 token mismatch
+Model validation at 60 tokens : 93.33333333333333% similarity, with 56 matched token, and 4 token mismatch
+Model validation at 65 tokens : 93.84615384615384% similarity, with 61 matched token, and 4 token mismatch
+Model validation at 70 tokens : 91.42857142857143% similarity, with 64 matched token, and 6 token mismatch
+Model validation at 75 tokens : 90.66666666666666% similarity, with 68 matched token, and 7 token mismatch
+Model validation at 80 tokens : 88.75% similarity, with 71 matched token, and 9 token mismatch
+Model validation at 85 tokens : 85.88235294117646% similarity, with 73 matched token, and 12 token mismatch
+Model validation at 90 tokens : 84.44444444444444% similarity, with 76 matched token, and 14 token mismatch
+Model validation at 95 tokens : 81.05263157894737% similarity, with 77 matched token, and 18 token mismatch
+Model validation at 100 tokens : 83.0% similarity, with 83 matched token, and 17 token mismatch
+Model validation at 110 tokens : 81.81818181818183% similarity, with 90 matched token, and 20 token mismatch
+Model validation at 120 tokens : 80.83333333333333% similarity, with 97 matched token, and 23 token mismatch
+Model validation at 130 tokens : 81.53846153846153% similarity, with 106 matched token, and 24 token mismatch
+Model validation at 140 tokens : 79.28571428571428% similarity, with 111 matched token, and 29 token mismatch
+Model validation at 150 tokens : 74.66666666666667% similarity, with 112 matched token, and 38 token mismatch
+Model validation at 175 tokens : 63.42857142857142% similarity, with 111 matched token, and 64 token mismatch
+Model validation at 200 tokens : 53.5% similarity, with 107 matched token, and 93 token mismatch
+Model validation at 225 tokens : 49.77777777777778% similarity, with 112 matched token, and 113 token mismatch
+Model validation at 250 tokens : 40.8% similarity, with 102 matched token, and 148 token mismatch
+Model validation at 275 tokens : 34.54545454545455% similarity, with 95 matched token, and 180 token mismatch
+Model validation at 300 tokens : 29.333333333333332% similarity, with 88 matched token, and 212 token mismatch
+Model validation at 325 tokens : 25.23076923076923% similarity, with 82 matched token, and 243 token mismatch
+Model validation at 350 tokens : 22.285714285714285% similarity, with 78 matched token, and 272 token mismatch
+Model validation at 375 tokens : 21.6% similarity, with 81 matched token, and 294 token mismatch
+Model validation at 400 tokens : 19.25% similarity, with 77 matched token, and 323 token mismatch
+Model validation at 425 tokens : 16.705882352941178% similarity, with 71 matched token, and 354 token mismatch
+Model validation at 450 tokens : 16.22222222222222% similarity, with 73 matched token, and 377 token mismatch
+Model validation at 475 tokens : 15.789473684210526% similarity, with 75 matched token, and 400 token mismatch
+Model validation at 500 tokens : 15.6% similarity, with 78 matched token, and 422 token mismatch
+Model validation at 550 tokens : 14.181818181818182% similarity, with 78 matched token, and 472 token mismatch
+Model validation at 600 tokens : 12.666666666666668% similarity, with 76 matched token, and 524 token mismatch
+Model validation at 650 tokens : 11.846153846153847% similarity, with 77 matched token, and 573 token mismatch
+Model validation at 700 tokens : 10.285714285714285% similarity, with 72 matched token, and 628 token mismatch
