@@ -41,7 +41,7 @@ markdwon_token = pipeline.encode("```")[0]
 
 # Pipeline args to use
 pipeline_args = PIPELINE_ARGS(
-                     temperature = 0.2, top_p = 0.2, 
+                     temperature = 0.2, top_p = 0, 
                      top_k = 1, # top_k = 0 then ignore
                      alpha_frequency = 0,
                      alpha_presence = 0,
@@ -57,8 +57,8 @@ with open('./eval_word_list.txt', 'r') as f:
 test_word_tokens = pipeline.encode(test_word_list)
 
 # Prompt template prefix to use
-prompt_prefix = "Memorise and reply back with the following document:"
-completion_prefix = "Reply:"
+prompt_prefix = "Instruction: Repeat this text exactly as it is\n\nInput:"
+completion_prefix = "Response:"
 
 # Function use to get words with the following token count
 def get_words_with_token_count(token_count):
