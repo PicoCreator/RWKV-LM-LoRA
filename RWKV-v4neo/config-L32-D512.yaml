@@ -57,7 +57,7 @@ trainer:
       every_n_epochs: null
       save_on_train_epoch_end: true
   fast_dev_run: false
-  max_epochs: -1
+  max_epochs: 1
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -82,7 +82,7 @@ trainer:
   inference_mode: true
   use_distributed_sampler: true
   profiler: null
-  detect_anomaly: true
+  detect_anomaly: false
   barebones: false
   plugins: null
   sync_batchnorm: false
@@ -92,11 +92,15 @@ model:
   ctx_len: 2048
   ctx_len_cutoffs: [8192]
   ctx_len_warmup_steps: [0]
-  n_embd: 2048
-  n_layer: 24
+  # ctx_len_cutoffs: [8192, 81000, 162000]
+  # ctx_len_warmup_steps: [0, 0, 0]
+  n_embd: 512
+  n_layer: 32
   vocab_size: 50277
   grad_cp: true
-  lr_init: 1.0e-04
+  # lr_init: 1.0e-04
+  # lr_init: 5.0e-04
+  lr_init: 3.0e-04
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99
@@ -104,9 +108,12 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  load_model: /home/ubuntu/RWKV-LM-LoRA/model/RWKV-4-Raven-1B5-v12-Eng98%-Other2%-20230520-ctx4096.pth
+  # load_model: /home/ubuntu/RWKV-LM-LoRA/build/Dummy-Telephone-enwiki-model-L32-D512-ctx512-epoch-10.pth
+  # load_model: /home/ubuntu/RWKV-LM-LoRA/build/RWKV-3B-Telephone-Game-R3.bin
+  load_model: /home/ubuntu/RWKV-LM-LoRA/build/Dummy-Telephone-L32-D512-FT2.pth
 data:
   data_path: /home/ubuntu/RWKV-LM-LoRA/data_path/
   source: /home/ubuntu/RWKV-LM-LoRA/dataset/
   tokenizer: /home/ubuntu/RWKV-LM-LoRA//RWKV-v4neo/20B_tokenizer.json
+  disablePromptCompletionMasking: true
 ckpt_path: null

@@ -39,4 +39,6 @@ Run the model
 ```
 python new_train.py fit -c ./config-169M.yaml 
 python new_train.py fit -c ./config-3B.yaml 
+
+python new_train.py fit -c ./echo-1B5-A.yaml
 ```
