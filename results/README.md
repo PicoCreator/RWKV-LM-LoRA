@@ -20,28 +20,3 @@ The eval script can be found at `eval_model_memory_guided.py`, for more details 
 
 The guided eval script, uses the memory task prompt that raven was trained with. It also "auto-correct" the evaluation process with the correct token, and measure where it failed.
 This helps trigger, the weaker associative memories, even if the model accidentally fall off track early (instead of being permenantly off the rails), while this means the matched token score might be slightly higher then actual day-to-day use, it is also a more accurate measurement of the model overall memory capacity.
-
-## RWKV 3B memory results
-
-**Native raven 3B results**
-- starts to lose accuracy after 10 tokens (still 90%+ accurate)
-- sharp drop after 40 tokens
-
-**Finetuned telephone 3B**
-- perfect memory until about 35 tokens
-- minor memory loss ('s) until 55 tokens
-- sharp drop after 55 tokens
-
-## RWKV 7B memory results
-
-**Native raven 7B**
-- (skip) wierd behaviour under 20 tokens
-- perfect memory from 25-35 tokens
-- minor 1 to 3 word drop from 40-50 tokens
-- major drop after 50 tokens
-
-## RWKV 14B memory results
-
-**Native raven 7B**
-- perfect memory until 50 tokens
-- drop off after 50 tokens
