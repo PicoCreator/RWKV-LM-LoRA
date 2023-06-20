@@ -154,4 +154,4 @@ data:
   # disablePromptCompletionMasking: false
 
 # Path to the current checkpoint to continue training from
-ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/epoch=2-step=540.ckpt/
+ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/epoch=3-step=660.ckpt/

@@ -143,8 +143,10 @@ dmypy.json
 .pyre/
 
 # Experimental changes
+.vscode
 checkpoint/
 dataset/
+dataset-text/
 model/
 data_path/
 node_modules/
