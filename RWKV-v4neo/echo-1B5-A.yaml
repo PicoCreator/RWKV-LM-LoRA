@@ -7,39 +7,39 @@ trainer:
   num_nodes: 1
   precision: bf16
   logger:
-  #   class_path: lightning.pytorch.loggers.WandbLogger
-  #   init_args:
-  #     name: null
-  #     save_dir: .
-  #     version: null
-  #     offline: false
-  #     dir: null
-  #     id: null
-  #     anonymous: null
-  #     project: 'RWKV-Memory-Experiment'
-  #     log_model: false
-  #     experiment: null
-  #     prefix: ''
-  #     checkpoint_name: null
-  #     job_type: null
-  #     config: null
-  #     entity: null
-  #     reinit: null
-  #     tags: ['RWKV', 'memory-exp']
-  #     group: null
-  #     notes: null
-  #     magic: null
-  #     config_exclude_keys: null
-  #     config_include_keys: null
-  #     mode: null
-  #     allow_val_change: null
-  #     resume: null
-  #     force: null
-  #     tensorboard: null
-  #     sync_tensorboard: null
-  #     monitor_gym: null
-  #     save_code: null
-  #     settings: null
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      name: 'Echo-1B5-A Foundation-enwiki-training'
+      save_dir: .
+      version: null
+      offline: false
+      dir: null
+      id: 'k1iwijsm'
+      anonymous: null
+      project: 'RWKV-Memory-Experiment'
+      log_model: false
+      experiment: null
+      prefix: ''
+      checkpoint_name: null
+      job_type: null
+      config: null
+      entity: null
+      reinit: null
+      tags: ['RWKV', 'memory-exp']
+      group: null
+      notes: null
+      magic: null
+      config_exclude_keys: null
+      config_include_keys: null
+      mode: null
+      allow_val_change: null
+      resume: true
+      force: null
+      tensorboard: null
+      sync_tensorboard: null
+      monitor_gym: null
+      save_code: null
+      settings: null
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
@@ -74,7 +74,7 @@ trainer:
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
-  accumulate_grad_batches: 128
+  accumulate_grad_batches: 64
   gradient_clip_val: 1.0
   gradient_clip_algorithm: null
   deterministic: null
@@ -97,7 +97,7 @@ model:
   vocab_size: 50277
   grad_cp: true
   # @TODO, add init / final LR
-  lr_init: 4.0e-04
+  lr_init: 6.0e-04
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99
@@ -152,4 +152,6 @@ data:
   # use this flag to disable this default behaviour
   # ---
   # disablePromptCompletionMasking: false
-ckpt_path: null
+
+# Path to the current checkpoint to continue training from
+ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/epoch=2-step=540.ckpt/
