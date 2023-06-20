@@ -1,20 +1,24 @@
 # Install setup
 
 ```bash
+# ninja-build is required for the trainer
 sudo apt-get install ninja-build
 
+# Virtual env, with python 3.11
 conda create -n rwkv-exp python=3.11 pip
 conda activate rwkv-exp
 
-# Ensure cudatoolkit is installed
-conda install -y -c conda-forge cudatoolkit=11.7 cudatoolkit-dev=11.7 
+# Install pytorch
+conda install -y pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+
+# # Ensure cudatoolkit is installed
+# conda install -y -c conda-forge cudatoolkit=11.7 cudatoolkit-dev=11.7 
 
 # We use python -m pip, instead of pip directly, as it resolve issues with venv not loading the right pip
-python -m pip install torch==2.0.1 datasets transformers 
+python -m pip install datasets transformers 
 python -m pip install lightning==2.0.2 deepspeed==0.9.3 
 python -m pip install ninja numexpr jsonargparse 'jsonargparse[signatures]'
-python -m pip install lm-dataformat ftfy sentencepiece tokenizers
-python -m pip install wandb
+python -m pip install lm-dataformat ftfy sentencepiece tokenizers wandb
 
 # For running the eval test
 python -m pip install rwkv
