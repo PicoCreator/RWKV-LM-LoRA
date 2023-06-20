@@ -96,7 +96,8 @@ def get_data_module(
         else:
             src_dataset = src_dataset.map(map_tokenizer, batched=True, num_proc=num_cpus, remove_columns=['text'])
 
-        # See if rechunking is needed
+        # See if rechunking is needed, this is useful only for text based datasets
+        # where we would need to split them into "digestable" context length sizes
         if source == "text" and text_chunk_size > 0:
             # Get the newline token
             newline_tokenSet = tokenizer(["\n"])
