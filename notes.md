@@ -6,8 +6,12 @@ sudo apt-get install ninja-build
 conda create -n rwkv-exp python=3.11 pip
 conda activate rwkv-exp
 
+# Ensure cudatoolkit is installed
+conda install -y -c conda-forge cudatoolkit=11.7 cudatoolkit-dev=11.7 
+
 # We use python -m pip, instead of pip directly, as it resolve issues with venv not loading the right pip
-python -m pip install lightning==2.0.2 deepspeed==0.9.3 torch==2.0.1 datasets transformers 
+python -m pip install torch==2.0.1 datasets transformers 
+python -m pip install lightning==2.0.2 deepspeed==0.9.3 
 python -m pip install ninja numexpr jsonargparse 'jsonargparse[signatures]'
 python -m pip install lm-dataformat ftfy sentencepiece tokenizers
 python -m pip install wandb
@@ -21,6 +25,41 @@ python -m pip install rwkv
 # pip install lm-dataformat ftfy sentencepiece tokenizers
 # pip install pytorch-lightning
 # pip install 'jsonargparse[signatures]==4.17.0'
+```
+
+FOR WINDOWS
+
+```bash
+conda create -n rwkv-exp python=3.11 pip
+conda activate rwkv-exp
+
+# For windows, due to known issues, this is abit more complicated
+# https://github.com/microsoft/DeepSpeed/issues/2427
+conda install -y pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+
+# Ensure cudatoolkit is installed
+conda install -y -c conda-forge cudatoolkit=11.7 cudatoolkit-dev=11.7 
+
+# We use python -m pip, instead of pip directly, as it resolve issues with venv not loading the right pip
+python -m pip install datasets transformers 
+python -m pip install lightning==2.0.2 
+
+# This is to help with deepspeed build issue
+python -m pip install py-cpuinfo
+
+# Install deepspeed itself
+python -m pip install deepspeed==0.9.3 
+
+# If the deepspeed install step fail, use this
+cmd /C "set DS_BUILD_AIO=0 && set DS_BUILD_SPARSE_ATTN=0 && set DS_BUILD_OPS=0 && python -m pip install deepspeed==0.9.3"
+
+python -m pip install ninja numexpr jsonargparse 'jsonargparse[signatures]'
+python -m pip install lm-dataformat ftfy sentencepiece tokenizers
+python -m pip install wandb
+
+# For running the eval test
+python -m pip install rwkv
+
 ```
 
 Download the 1B5 model
