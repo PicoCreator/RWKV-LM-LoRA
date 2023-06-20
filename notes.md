@@ -27,7 +27,7 @@ python -m pip install rwkv
 # pip install 'jsonargparse[signatures]==4.17.0'
 ```
 
-FOR WINDOWS
+FOR WINDOWS (does not work)
 
 ```bash
 conda create -n rwkv-exp python=3.11 pip
