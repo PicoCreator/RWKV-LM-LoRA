@@ -20,12 +20,12 @@ node ./gen_dataset_file.js ./dataset/word-20-count-1k.jsonl 20 1000 &
 node ./gen_dataset_file.js ./dataset/word-40-count-1k.jsonl 40 1000 &
 node ./gen_dataset_file.js ./dataset/word-80-count-1k.jsonl 80 1000 &
 
-# node ./gen_dataset_file.js ./dataset/word-2-count-10k.jsonl  2  10000 &
-# node ./gen_dataset_file.js ./dataset/word-5-count-10k.jsonl  5  10000 &
-# node ./gen_dataset_file.js ./dataset/word-10-count-10k.jsonl 10 10000 &
-# node ./gen_dataset_file.js ./dataset/word-20-count-10k.jsonl 20 10000 &
-# node ./gen_dataset_file.js ./dataset/word-40-count-10k.jsonl 40 10000 &
-# node ./gen_dataset_file.js ./dataset/word-80-count-10k.jsonl 80 10000 &
+node ./gen_dataset_file.js ./dataset/word-2-count-10k.jsonl  2  10000 &
+node ./gen_dataset_file.js ./dataset/word-5-count-10k.jsonl  5  10000 &
+node ./gen_dataset_file.js ./dataset/word-10-count-10k.jsonl 10 10000 &
+node ./gen_dataset_file.js ./dataset/word-20-count-10k.jsonl 20 10000 &
+node ./gen_dataset_file.js ./dataset/word-40-count-10k.jsonl 40 10000 &
+node ./gen_dataset_file.js ./dataset/word-80-count-10k.jsonl 80 10000 &
 
 # # From 100 to 1000 words
 node ./gen_dataset_file.js ./dataset/word-100-count-2k.jsonl 100 2000 &
