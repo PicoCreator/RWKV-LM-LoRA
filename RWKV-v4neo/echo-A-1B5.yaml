@@ -57,7 +57,7 @@ trainer:
       every_n_epochs: null
       save_on_train_epoch_end: true
   fast_dev_run: false
-  max_epochs: -1
+  max_epochs: 10
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -154,4 +154,4 @@ data:
   # disablePromptCompletionMasking: false
 
 # Path to the current checkpoint to continue training from
-ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/epoch=4-step=880.ckpt/
+ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/epoch=8-step=1670.ckpt/
