@@ -9,14 +9,14 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-B-1B4 Foundation-enwiki-training'
+      name: Echo-B-1B6 Foundation-enwiki-training
       save_dir: .
       version: null
       offline: false
       dir: null
-      id: '67ndndub'
+      id: mgyx9u3k
       anonymous: null
-      project: 'RWKV-Memory-Experiment'
+      project: RWKV-Memory-Experiment
       log_model: false
       experiment: null
       prefix: ''
@@ -25,7 +25,9 @@ trainer:
       config: null
       entity: null
       reinit: null
-      tags: ['RWKV', 'memory-exp']
+      tags:
+      - RWKV
+      - memory-exp
       group: null
       notes: null
       magic: null
@@ -43,14 +45,14 @@ trainer:
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/echo-B-1B4/
+      dirpath: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/echo-B-1B6/
       filename: null
-      monitor: null
+      monitor: time_log
       verbose: false
       save_last: null
-      save_top_k: 1
+      save_top_k: 10
       save_weights_only: false
-      mode: min
+      mode: max
       auto_insert_metric_name: true
       every_n_train_steps: 10
       train_time_interval: null
@@ -90,14 +92,15 @@ trainer:
   default_root_dir: null
 model:
   ctx_len: 2048
-  ctx_len_cutoffs: [8192]
-  ctx_len_warmup_steps: [0]
-  n_embd: 1024
-  n_layer: 96
+  ctx_len_cutoffs:
+  - 8192
+  ctx_len_warmup_steps:
+  - 0
+  n_embd: 1536
+  n_layer: 48
   vocab_size: 50277
   grad_cp: true
-  # @TODO, add init / final LR
-  lr_init: 10.0e-04
+  lr_init: 0.001
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99
@@ -105,53 +108,14 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  load_model: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/build/Echo-B-Init-1B4.pth
+  load_model: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/build/Echo-B-Init-1B6.pth
 data:
-  # dataset_path for the prebuilt dataset, using HF `load_from_disk()`
-  #
-  # Use this if you have built your own dataset and saved it with `save_to_disk()`
-  # with source left as null
   data_path: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/data_path/
-
-  # Other wise provide the source path, which is used as huggingface dataset path
-  # this will be used to populate the dataset_path
-  #
-  # Use either the following
-  # - hugging face dataset 
-  # - Directory path to a directory containing dataset files
-  # - Path to a single dataset file
-  # - hugging face dataset mode (ie: text,csv,etc - use data_dir, to configure the path then)
-  # - null
-  #
-  # If source is disabled, all other params, except data_path, is ignored
   source: text
-  # source: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/dataset-text/enwik8.txt
-
-  # Use data_dir, if you are using source=text/json/etc
   source_data_dir: ../dataset-text/
-
-  # Postload test dataset splitting, 
-  # This process is skipped if the dataset includes a test split
-  # This process is skipped if set to zero
   test_split: 0.05
   test_split_shuffle: false
-
-  # Rechunking of text dataset, this is done only when source is set as 'text'
-  # and will merge the various sentencees, into larger chunks up to the target size
-  #
-  # This is ignored, if source is not set as text
-  # This is ignored, if set to zero
   text_chunk_size: 2048
-
-  # Tokenizer to use, use either the inbuilt 'neox', or 'world' tokenizer
-  # If using a custom tokenizer, provide the tokenizer file path
-  # ---
-  # tokenizer: neox
-
-  # If processing prompt/completion jsonl pairs, the prompt is masked by default
-  # use this flag to disable this default behaviour
-  # ---
-  # disablePromptCompletionMasking: false
-
-# Path to the current checkpoint to continue training from
-ckpt_path: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/epoch=2-step=290.ckpt/
+  tokenizer: neox
+  disablePromptCompletionMasking: false
+ckpt_path: null
