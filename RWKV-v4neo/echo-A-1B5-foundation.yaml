@@ -9,7 +9,7 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-1B5-A Foundation-enwiki-training'
+      name: 'Echo-A-1B5 Foundation-enwiki-training'
       save_dir: .
       version: null
       offline: false
@@ -43,7 +43,7 @@ trainer:
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/
+      dirpath: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-A-1B5/
       filename: null
       monitor: null
       verbose: false
@@ -105,7 +105,7 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  load_model: /home/ubuntu/RWKV-LM-LoRA/build/Echo-Init-1B5-A.pth
+  load_model: /home/ubuntu/RWKV-LM-LoRA/build/Echo-Init-A-1B5.pth
 data:
   # dataset_path for the prebuilt dataset, using HF `load_from_disk()`
   #
@@ -154,4 +154,4 @@ data:
   # disablePromptCompletionMasking: false
 
 # Path to the current checkpoint to continue training from
-ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-1B5-A/epoch=8-step=1670.ckpt/
+ckpt_path: /home/ubuntu/RWKV-LM-LoRA/checkpoint/echo-A-1B5/epoch=8-step=1670.ckpt/
