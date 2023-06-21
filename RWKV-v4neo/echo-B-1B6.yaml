@@ -77,7 +77,7 @@ trainer:
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
-  accumulate_grad_batches: 256
+  accumulate_grad_batches: 512
   gradient_clip_val: 1.0
   gradient_clip_algorithm: null
   deterministic: null
@@ -100,7 +100,7 @@ model:
   vocab_size: 50277
   grad_cp: true
   # @TODO, add init / final LR
-  lr_init: 10.0e-04
+  lr_init: 12.0e-04
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99
