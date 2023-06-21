@@ -9,12 +9,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-B-1B6 Foundation-enwiki-training'
+      name: 'echo-C-1B6 Foundation-enwiki-training'
       save_dir: .
       version: null
       offline: false
       dir: null
-      id: 'mgyx9u3k'
+      id: null
       anonymous: null
       project: 'RWKV-Memory-Experiment'
       log_model: false
@@ -43,17 +43,14 @@ trainer:
   callbacks:
   - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     init_args:
-      dirpath: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/echo-B-1B6/
+      dirpath: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/echo-C-1B6/
       filename: null
       monitor: null
       verbose: false
       save_last: null
-      # Save the top 10
-      save_top_k: 10
-      # Choose by the most recent checkpoints
-      monitor: 'time_log'
-      mode: max
+      save_top_k: 1
       save_weights_only: false
+      mode: min
       auto_insert_metric_name: true
       every_n_train_steps: 10
       train_time_interval: null
@@ -77,7 +74,7 @@ trainer:
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
-  accumulate_grad_batches: 256
+  accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   gradient_clip_algorithm: null
   deterministic: null
@@ -100,7 +97,7 @@ model:
   vocab_size: 50277
   grad_cp: true
   # @TODO, add init / final LR
-  lr_init: 10.0e-04
+  lr_init: 8.0e-04
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99
@@ -108,7 +105,7 @@ model:
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
-  load_model: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/build/Echo-B-Init-1B6.pth
+  load_model: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/build/echo-C-Init-1B6.pth
 data:
   # dataset_path for the prebuilt dataset, using HF `load_from_disk()`
   #

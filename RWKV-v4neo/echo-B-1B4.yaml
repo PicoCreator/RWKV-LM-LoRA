@@ -14,7 +14,7 @@ trainer:
       version: null
       offline: false
       dir: null
-      id: '67ndndub'
+      id: null
       anonymous: null
       project: 'RWKV-Memory-Experiment'
       log_model: false
@@ -45,19 +45,22 @@ trainer:
     init_args:
       dirpath: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/echo-B-1B4/
       filename: null
-      monitor: null
       verbose: false
       save_last: null
-      save_top_k: 1
+      # Save the top/last K checkpoints
+      save_top_k: 10
+      # Choose by the most recent checkpoints (time based)
+      monitor: 'time_log'
+      mode: max
+      #
       save_weights_only: false
-      mode: min
       auto_insert_metric_name: true
       every_n_train_steps: 10
       train_time_interval: null
       every_n_epochs: null
       save_on_train_epoch_end: true
   fast_dev_run: false
-  max_epochs: 8
+  max_epochs: 10
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -97,7 +100,7 @@ model:
   vocab_size: 50277
   grad_cp: true
   # @TODO, add init / final LR
-  lr_init: 10.0e-04
+  lr_init: 12.0e-04
   warmup_steps: -1
   beta1: 0.9
   beta2: 0.99
@@ -154,4 +157,4 @@ data:
   # disablePromptCompletionMasking: false
 
 # Path to the current checkpoint to continue training from
-ckpt_path: /home/picocreator/rwkv-proj/my-RWKV-LM-LoRA/checkpoint/epoch=2-step=290.ckpt/
+ckpt_path: null

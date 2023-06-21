@@ -1,7 +1,7 @@
 # Install setup
 
 ```bash
-# ninja-build is required for the trainer
+# ninja-build is required for the new trainer
 sudo apt-get install ninja-build
 
 # Virtual env, with python 3.11
