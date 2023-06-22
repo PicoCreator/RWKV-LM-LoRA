@@ -259,8 +259,9 @@ data:
   # (eg. removal of small articles of less then 1024 tokens from wikipedia)
   #
   # This is ignored, if set to -1
-  min_token_size: 1024
-  max_token_size: -1
+  # ---
+  # min_token_size: 1024
+  # max_token_size: -1
 
   # Rechunking of text dataset, this is done only when source is set as 'text'
   # and will merge the various sentencees, into larger chunks up to the target size
