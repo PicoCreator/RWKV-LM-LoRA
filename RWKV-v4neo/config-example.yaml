@@ -208,6 +208,11 @@ model:
   adam_eps: 1.0e-08
   weight_decay: 0.01
 
+  # torch.set_float32_matmul_precision, used to optimize operations with tensor cores
+  # this should be set as null, for non cuda core GPUs
+  torch_set_float32_matmul_precision: 'high'
+  # torch_set_float32_matmul_precision: null
+
   # various other settings you probably should leave alone
   grad_cp: true
   warmup_steps: -1
