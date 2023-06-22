@@ -335,7 +335,7 @@ class RWKV(L.LightningModule):
                                          eps=self.adam_eps,
                                          bias_correction=True,
                                          adamw_mode=False,
-                                         weight_decay=torch.tensor(self.weight_decay),
+                                         weight_decay=self.weight_decay,
                                          amsgrad=False)
         else:
             optimizer = FusedAdam(optim_groups,
@@ -344,7 +344,7 @@ class RWKV(L.LightningModule):
                                   eps=self.adam_eps,
                                   bias_correction=True,
                                   adam_w_mode=False,
-                                  weight_decay=torch.tensor(self.weight_decay),
+                                  weight_decay=self.weight_decay,
                                   amsgrad=False)
 
         if self.warmup_steps > 0:

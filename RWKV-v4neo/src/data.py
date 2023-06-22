@@ -23,6 +23,9 @@ def get_data_module(
         # ---
         # HF dataset conversion helpers
         # ---
+        # Min / Max token size filtering
+        min_token_size: int = -1,
+        max_token_size: int = -1,
         # Custom 'text' column to support, mostly used for dataset where the 
         # desired train data is in another column (eg. 'code')
         custom_text_key: str = None,
@@ -262,6 +265,20 @@ def get_data_module(
             src_dataset = src_dataset.map(rechunk_text, batched=True, 
                                           batch_size=text_rechunk_size*10,
                                           num_proc=num_cpus)
+        
+        # Remove empty datasets (it causes an error otherwise)
+        # and perform min/max length filtering (if configured)
+        def dataset_filter(x):
+            row_length = len(x["input_ids"])
+            if row_length <= 0:
+                return False
+            if min_token_size > 0 and row_length < min_token_size:
+                return False
+            if max_token_size > 0 and row_length > max_token_size:
+                return False
+            return True
+
+        src_dataset = src_dataset.filter(dataset_filter)
 
         # Check if the dataset does not have a test split
         # and if so, perform the split

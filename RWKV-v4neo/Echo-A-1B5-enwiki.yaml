@@ -39,7 +39,7 @@ trainer:
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwiki2t'
+      id: 'aenwiki3t'
       save_dir: .
       version: null
       offline: false
@@ -200,7 +200,7 @@ model:
   ctx_len_warmup_steps: [0, 0, 0, 0]
 
   # Learning rate of the training process
-  lr_init: 8.0e-04
+  lr_init: 6.0e-04
 
   # Adam optimizer settings
   # You probably want to leave this alone, unless you know what you are doing
@@ -226,7 +226,7 @@ data:
   # Use this if you have built your own dataset and saved it with `save_to_disk()`
   # with source left as null. Other wise configure this to a directory which the 
   # dataset will be built and tokenized by the huggingface dataset process.
-  data_path: ../datapaths/enwiki_10k/
+  data_path: ../datapaths/enwiki_100k/
 
   # Other wise provide the source path, which is used as huggingface dataset path
   # this will be used to populate the dataset_path
@@ -239,7 +239,7 @@ data:
   # - null
   #
   # If source is disabled, all other params, except data_path, is ignored
-  source: "teven/enwiki_10k"
+  source: "teven/enwiki_100k"
   # source: text
   # source: /home/ubuntu/RWKV-LM-LoRA/dataset-text/enwik8.txt
 
@@ -257,6 +257,14 @@ data:
   # If using a custom tokenizer, provide the tokenizer file path
   # ---
   tokenizer: neox
+
+  # Minimum / Maximum token size of the dataset to use
+  # useful for filtering out small noisy data samples from large datasets
+  # (eg. removal of small articles of less then 512 tokens from wikipedia)
+  #
+  # This is ignored, if set to -1
+  min_token_size: 512
+  max_token_size: -1
 
   # Rechunking of text dataset, this is done only when source is set as 'text'
   # and will merge the various sentencees, into larger chunks up to the target size
