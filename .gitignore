@@ -145,6 +145,8 @@ dmypy.json
 # Additional folders used for the experiment
 # and standard hidden files ignore
 .*
+*/lightning_logs/
+*/config.yaml
 model/
 datapaths/
 checkpoint/
