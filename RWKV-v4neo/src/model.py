@@ -236,7 +236,8 @@ class RWKV(L.LightningModule):
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
-                 load_model: Optional[str] = None):
+                 load_model: Optional[str] = None,
+                 torch_set_float32_matmul_precision:str = None):
         super().__init__()
         self.ctx_len = ctx_len
         self.ctx_len_cutoffs = ctx_len_cutoffs
@@ -254,6 +255,9 @@ class RWKV(L.LightningModule):
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
+
+        if torch_set_float32_matmul_precision is not None:
+            torch.set_float32_matmul_precision(torch_set_float32_matmul_precision)
 
         self.emb = nn.Embedding(vocab_size, n_embd)
 

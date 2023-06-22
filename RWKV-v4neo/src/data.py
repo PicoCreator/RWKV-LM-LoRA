@@ -149,7 +149,7 @@ def get_data_module(
                             input_ids += column_encodings['input_ids']
                             token_type_ids += column_encodings['token_type_ids']
 
-                            # Add the attention mask if masking is enabled
+                            # Override the attention mask if masking is enabled
                             if multi_column_masking[i]:
                                 attention_mask += ([1] * len(column_encodings['input_ids']))
                             else:
@@ -185,12 +185,11 @@ def get_data_module(
                     attention_mask = ([0] * len(prompt_encodings['input_ids']) + [1] * len(completion_encodings['input_ids']))
 
                 # Prepare and return the output object
-                ret = {
+                return {
                     'input_ids': input_ids,
                     'token_type_ids': token_type_ids,
                     'attention_mask': attention_mask,
                 }
-                return ret
             
             # Fallback to standard text tokenization
             if 'text' in x:
@@ -200,7 +199,13 @@ def get_data_module(
 
         # Map the dataset to the tokenizer, removing the old text column
         src_dataset = src_dataset.map(map_tokenizer, batched=False, num_proc=num_cpus)
-
+        
+        # Remove all features, except input_ids, token_type_ids and attention_mask
+        # as the metadata/etc columns may cause problems down the line (when passed to the trainer)
+        dataset_features = src_dataset["train"].features
+        dataset_features_to_remove = {k: v for k, v in dataset_features.items() if k not in ["input_ids", "token_type_ids", "attention_mask"]}
+        src_dataset = src_dataset.remove_columns(list(dataset_features_to_remove.keys()))
+        
         # See if rechunking is needed, this is useful only for raw "text" based datasets
         # where we would need to split them into "digestable" context length sizes
         # (this function will break otherwise, due to change in the sample sizes)
@@ -256,7 +261,6 @@ def get_data_module(
             # Perform the rechunking
             src_dataset = src_dataset.map(rechunk_text, batched=True, 
                                           batch_size=text_rechunk_size*10,
-                                          remove_columns=['text'],
                                           num_proc=num_cpus)
 
         # Check if the dataset does not have a test split
