@@ -141,3 +141,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Additional folders used for the experiment
+# and standard hidden files ignore
+.*
+model/
+datapaths/
+checkpoint/
