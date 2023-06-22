@@ -39,7 +39,7 @@ trainer:
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwiki0t'
+      id: 'aenwiki2t'
       save_dir: .
       version: null
       offline: false
@@ -91,7 +91,7 @@ trainer:
       
       # If enabled (true), save a copy of the latest checkpoint to 'last.ckpt'
       # useful to simply checkpoint resume scripts, at a price of disk performance
-      save_last: true
+      save_last: false
 
       # DO NOT set this as true, as the model weight exported will have format issues
       # expert as checkpoint, and use the `export_checkpoint.py` script to convert to model instead
@@ -133,7 +133,7 @@ trainer:
   #
   # Recommended to be a big enough number (like 128/256) where it prevents the training 
   # loss from flucuating in the process. But not too big of a number where the increased
-  # GPU vRAM usage will cause the training to crash.
+  # GPU vRAM / offloaded RAM usage will cause the training to crash.
   #
   # You are also recommended to configure this to a large enough number to fully utilize
   # your GPU processing time %, and avoid idle time for the GPU between batches
@@ -210,8 +210,9 @@ model:
   weight_decay: 0.01
 
   # torch.set_float32_matmul_precision, used to optimize operations with tensor cores
-  # should be set as null, for non cuda core GPUs
-  torch_set_float32_matmul_precision: "high"
+  # this should be set as null, for non cuda core GPUs
+  torch_set_float32_matmul_precision: 'high'
+  # torch_set_float32_matmul_precision: null
 
   # various other settings you probably should leave alone
   grad_cp: true
