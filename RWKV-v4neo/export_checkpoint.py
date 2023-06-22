@@ -2,8 +2,6 @@
 import sys
 import os
 import re
-from collections import OrderedDict
-import torch
 
 # ----
 # This script is used to export the checkpoint into RWKV model
