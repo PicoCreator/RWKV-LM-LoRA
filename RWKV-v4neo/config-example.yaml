@@ -83,12 +83,15 @@ trainer:
       filename: null
       
       # Save the top/last K checkpoints
-      save_top_k: 10
+      save_top_k: 5
       # Choose by the most recent checkpoints (time based)
-      monitor: 'time_log'
+      monitor: 'step'
       mode: max
       
+      # If enabled (true), save a copy of the latest checkpoint to 'last.ckpt'
+      # useful to simply checkpoint resume scripts, at a price of disk performance
       save_last: null
+
       # DO NOT set this as true, as the model weight exported will have format issues
       # expert as checkpoint, and use the `export_checkpoint.py` script to convert to model instead
       save_weights_only: false
@@ -100,7 +103,7 @@ trainer:
       # as the checkpoint process, will pause all the gpu training for some time, slowing down the overall process
       # However you do not want to configure too high of a number, where you will lose too much progress if the training crashes
       every_n_train_steps: 100
-      every_n_epochs: 1
+      every_n_epochs: null
       save_on_train_epoch_end: true
       train_time_interval: null
 
@@ -127,13 +130,13 @@ trainer:
   # This decides the number of datasample, to learn together from, before backproping
   # any weight changes at the end of the batch.
   #
-  # Recommended to be a big enough number (like 128) where it prevents the training 
+  # Recommended to be a big enough number (like 128/256) where it prevents the training 
   # loss from flucuating in the process. But not too big of a number where the increased
   # GPU vRAM usage will cause the training to crash.
   #
   # You are also recommended to configure this to a large enough number to fully utilize
   # your GPU processing time %, and avoid idle time for the GPU between batches
-  accumulate_grad_batches: 128
+  accumulate_grad_batches: 256
 
   # Various other settings, you probably want to leave alone
   fast_dev_run: false
@@ -198,12 +201,16 @@ model:
   # Learning rate of the training process
   lr_init: 1.0e-04
 
-  # various other settings you probably should leave alone
-  grad_cp: true
-  warmup_steps: -1
+  # Adam optimizer settings
+  # You probably want to leave this alone, unless you know what you are doing
   beta1: 0.9
   beta2: 0.99
   adam_eps: 1.0e-08
+  weight_decay: 0.01
+
+  # various other settings you probably should leave alone
+  grad_cp: true
+  warmup_steps: -1
   layerwise_lr: true
   dim_att: null
   dim_ffn: null
