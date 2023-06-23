@@ -208,6 +208,11 @@ model:
   adam_eps: 1.0e-08
   weight_decay: 0.01
 
+  # torch.set_float32_matmul_precision, used to optimize operations with tensor cores
+  # this should be set as null, for non cuda core GPUs
+  # torch_set_float32_matmul_precision: 'high'
+  torch_set_float32_matmul_precision: null
+
   # various other settings you probably should leave alone
   grad_cp: true
   warmup_steps: -1
@@ -236,7 +241,8 @@ data:
   # as the dataset building process is skipped. You are expected to prepare the huggingface
   # compliant dataset yourself, and save it to the data_path
   source: null
-  # source: text
+  # source: "teven/enwiki_100k"  # Hugging face dataset
+  # source: text                 # Text dir, used with source_data_dir
   # source: /home/ubuntu/RWKV-LM-LoRA/dataset-text/enwik8.txt
 
   # Use data_dir, if you are using source=text/json/etc
@@ -272,6 +278,10 @@ data:
   # This is ignored, if set to zero
   # ---
   # text_rechunk_size: 2048
+
+  # Apply text rechunk to the dataset, even if its not a 'text' source
+  # ---
+  # text_rechunk_force: false
 
   # Custom text column to use, useful for dataset with alternative training columns labels
   # This is checked before multi column merging, default is null (disabled)

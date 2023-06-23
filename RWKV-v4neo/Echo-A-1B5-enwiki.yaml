@@ -35,11 +35,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 Foundation'
+      name: 'Echo-A-1B5 mini-enwiki-test (lr 2.0e-4, wd 0.00, ctx 2048)'
+      # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwiki3t'
+      id: 'aenwikt02'
       save_dir: .
       version: null
       offline: false
@@ -119,7 +120,7 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 1
+  max_epochs: 10
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -200,14 +201,14 @@ model:
   ctx_len_warmup_steps: [0, 0, 0, 0]
 
   # Learning rate of the training process
-  lr_init: 6.0e-04
+  lr_init: 2.0e-04
 
   # Adam optimizer settings
   # You probably want to leave this alone, unless you know what you are doing
   beta1: 0.9
   beta2: 0.99
   adam_eps: 1.0e-08
-  weight_decay: 0.01
+  weight_decay: 0.00
 
   # torch.set_float32_matmul_precision, used to optimize operations with tensor cores
   # this should be set as null, for non cuda core GPUs
@@ -226,7 +227,7 @@ data:
   # Use this if you have built your own dataset and saved it with `save_to_disk()`
   # with source left as null. Other wise configure this to a directory which the 
   # dataset will be built and tokenized by the huggingface dataset process.
-  data_path: ../datapaths/enwiki_100k/
+  data_path: ../datapaths/enwiki_10k/
 
   # Other wise provide the source path, which is used as huggingface dataset path
   # this will be used to populate the dataset_path
@@ -239,7 +240,7 @@ data:
   # - null
   #
   # If source is disabled, all other params, except data_path, is ignored
-  source: "teven/enwiki_100k"
+  source: "teven/enwiki_10k"
   # source: text
   # source: /home/ubuntu/RWKV-LM-LoRA/dataset-text/enwik8.txt
 
@@ -263,18 +264,23 @@ data:
   # (eg. removal of small articles of less then 512 tokens from wikipedia)
   #
   # This is ignored, if set to -1
-  min_token_size: 512
+  min_token_size: 64
   max_token_size: -1
 
   # Rechunking of text dataset, this is done only when source is set as 'text'
   # and will merge the various sentencees, into larger chunks up to the target size
   #
-  # Defaults to 2048
+  # Defaults to 4096
   #
   # This is ignored, if source is not set as text
   # This is ignored, if set to zero
   # ---
-  # text_rechunk_size: 2048
+  text_rechunk_size: 4096
+
+  # Apply text rechunk to the dataset, even if its not a 'text' source
+  # This is done only after dataset filtering, and if source is not 'text'
+  # ---
+  text_rechunk_force: true
 
   # Custom text column to use, useful for dataset with alternative training columns labels
   # This is checked before multi column merging, default is null (disabled)
@@ -302,5 +308,6 @@ data:
 # Path to the current checkpoint to continue training from
 # Enable this to the last checkpoint after the first run 
 # (if it crash and you want to resume)
-# ckpt_path: ../checkpoint/Echo-A-1B5-enwiki/last.ckpt
+# ckpt_path: ../checkpoint/Echo-A-1B5-enwiki/epoch=1-step=20.ckpt
 ckpt_path: null
+# ckpt_path: /home/picocreator/rwkv-proj/memory-experiment-RWKV/checkpoint/Echo-A-1B5-enwiki/epoch=1-step=20.ckpt
