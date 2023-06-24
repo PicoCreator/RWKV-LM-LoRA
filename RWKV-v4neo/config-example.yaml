@@ -84,7 +84,7 @@ trainer:
       
       # Save the top/last K checkpoints
       save_top_k: 5
-      # Choose by the most recent checkpoints (time based)
+      # Choose the most recent checkpoints by steps
       monitor: 'step'
       mode: max
       
