@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import os, math
+import os, math, sys
 from random import randint
 from typing import List, Optional
 import numpy as np
@@ -228,6 +228,8 @@ class RWKV(L.LightningModule):
                  vocab_size: int,
                  grad_cp: bool,
                  lr_init: float,
+                 lr_final: float,
+                 lr_period: int,
                  warmup_steps: int = -1,
                  beta1: float = 0.9,
                  beta2: float = 0.99,
@@ -248,6 +250,8 @@ class RWKV(L.LightningModule):
         self.layerwise_lr = layerwise_lr
         self.grad_cp = grad_cp
         self.lr_init = lr_init
+        self.lr_final = lr_final
+        self.lr_period = lr_period
         self.warmup_steps = warmup_steps
         self.beta1 = beta1
         self.beta2 = beta2
@@ -328,9 +332,13 @@ class RWKV(L.LightningModule):
                 },
             ]
 
+        starting_lr = self.lr_init
+        if self.warmup_steps <= 0 and self.lr_period <= 0:
+            starting_lr = self.lr_final
+
         if self.deepspeed_offload:
             optimizer = DeepSpeedCPUAdam(optim_groups,
-                                         lr=self.lr_init,
+                                         lr=starting_lr,
                                          betas=(self.beta1, self.beta2),
                                          eps=self.adam_eps,
                                          bias_correction=True,
@@ -339,7 +347,7 @@ class RWKV(L.LightningModule):
                                          amsgrad=False)
         else:
             optimizer = FusedAdam(optim_groups,
-                                  lr=self.lr_init,
+                                  lr=starting_lr,
                                   betas=(self.beta1, self.beta2),
                                   eps=self.adam_eps,
                                   bias_correction=True,
@@ -357,6 +365,18 @@ class RWKV(L.LightningModule):
 
             return optimizer, lr_scheduler
         else:
+            if self.lr_period > 0:
+                lr_final_factor = (self.lr_final / self.lr_init)
+                if( lr_final_factor <= 0 ) {
+                    raise ValueError(f"lr_final is too small to be reached in {self.lr_period} steps.")
+                }
+                lr_scheduler = deepspeed.runtime.lr_schedules.LinearLR(
+                    optimizer, 
+                    start_factor=1.0, 
+                    end_factor=lr_final_factor, 
+                    total_iters=self.lr_period
+                )
+                return optimizer, lr_scheduler
             return optimizer
 
     @property
@@ -474,7 +494,15 @@ class RWKV(L.LightningModule):
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
-            wandb.log({'substep': batch_idx, 'real_ctx_len': T, 'train/loss': total_loss, 'trainer/global_step':self.global_step})
+            # Get the current learning rate
+            lr = self.trainer.optimizers[0].param_groups[0]['lr']
+            wandb.log({
+                'substep': batch_idx, 
+                'real_ctx_len': T, 
+                'train/loss': total_loss,
+                'trainer/global_step':self.global_step,
+                'trainer/learning_rate': lr
+            })
 
         return total_loss
 
