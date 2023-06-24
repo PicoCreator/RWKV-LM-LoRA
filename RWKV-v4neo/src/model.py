@@ -364,18 +364,18 @@ class RWKV(L.LightningModule):
                 warmup_type='linear')
 
             return optimizer, lr_scheduler
+        # elif self.lr_period > 0:
+        #     lr_final_factor = (self.lr_final / self.lr_init)
+        #     if lr_final_factor <= sys.float_info.min:
+        #         raise ValueError(f"lr_final is too small to be reached in {self.lr_period} steps.")
+        #     lr_scheduler = deepspeed.runtime.lr_schedules.LinearLR(
+        #         optimizer, 
+        #         start_factor=1.0, 
+        #         end_factor=lr_final_factor, 
+        #         total_iters=self.lr_period
+        #     )
+        #     return optimizer, lr_scheduler
         else:
-            if self.lr_period > 0:
-                lr_final_factor = (self.lr_final / self.lr_init)
-                if lr_final_factor <= sys.float_info.min:
-                    raise ValueError(f"lr_final is too small to be reached in {self.lr_period} steps.")
-                lr_scheduler = deepspeed.runtime.lr_schedules.LinearLR(
-                    optimizer, 
-                    start_factor=1.0, 
-                    end_factor=lr_final_factor, 
-                    total_iters=self.lr_period
-                )
-                return optimizer, lr_scheduler
             return optimizer
 
     @property
