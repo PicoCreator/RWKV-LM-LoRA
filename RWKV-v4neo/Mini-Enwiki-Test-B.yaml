@@ -35,12 +35,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Mini-Enwiki-Test-B (lr 5.0e-5, wd 0.01, ctx 128, data 1024, fixed seed)'
+      name: 'Mini-Enwiki-Test-B (lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwikm07'
+      id: 'aenwikm09'
       save_dir: .
       version: null
       offline: false
