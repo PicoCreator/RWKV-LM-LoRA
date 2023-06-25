@@ -228,8 +228,9 @@ class RWKV(L.LightningModule):
                  vocab_size: int,
                  grad_cp: bool,
                  lr_init: float,
-                 lr_final: float,
-                 lr_period: int,
+                 lr_final: float = -1.0,
+                 lr_period: int = -1,
+                 lr_period_type: str = 'epoch',
                  warmup_steps: int = -1,
                  beta1: float = 0.9,
                  beta2: float = 0.99,
@@ -252,6 +253,7 @@ class RWKV(L.LightningModule):
         self.lr_init = lr_init
         self.lr_final = lr_final
         self.lr_period = lr_period
+        self.lr_period_type = lr_period_type
         self.warmup_steps = warmup_steps
         self.beta1 = beta1
         self.beta2 = beta2
@@ -332,7 +334,12 @@ class RWKV(L.LightningModule):
                 },
             ]
 
+        # Set ending_lr to starting_lr, as default behavior
         starting_lr = self.lr_init
+        ending_lr = self.lr_final
+        if ending_lr < 0:
+            ending_lr = self.lr_init
+
         if self.warmup_steps <= 0 and self.lr_period <= 0:
             starting_lr = self.lr_final
 
@@ -354,6 +361,11 @@ class RWKV(L.LightningModule):
                                   adam_w_mode=False,
                                   weight_decay=self.weight_decay,
                                   amsgrad=False)
+            
+        # Throw if wramup_steps and lr_period are both set (not supported)
+        if self.warmup_steps > 0 and self.lr_period > 0:
+            raise ValueError(
+                "Use either warmup_steps or lr_period, not both.")
 
         if self.warmup_steps > 0:
             lr_scheduler = deepspeed.runtime.lr_schedules.WarmupLR(
@@ -364,20 +376,89 @@ class RWKV(L.LightningModule):
                 warmup_type='linear')
 
             return optimizer, lr_scheduler
-        # elif self.lr_period > 0:
-        #     lr_final_factor = (self.lr_final / self.lr_init)
-        #     if lr_final_factor <= sys.float_info.min:
-        #         raise ValueError(f"lr_final is too small to be reached in {self.lr_period} steps.")
-        #     lr_scheduler = deepspeed.runtime.lr_schedules.LinearLR(
-        #         optimizer, 
-        #         start_factor=1.0, 
-        #         end_factor=lr_final_factor, 
-        #         total_iters=self.lr_period
-        #     )
-        #     return optimizer, lr_scheduler
+        
+        elif self.lr_period > 0:
+
+            # Skip the lr_scheduler process if lr_init and lr_final are the same
+            if starting_lr == ending_lr:
+                return optimizer
+
+            # The total number of steps to perform training rate decay with
+            lr_total_step = 0
+
+            # Handle lr_period -1 default behaviour of using the max_step / max_epoch
+            if self.lr_period == -1:
+                # Get trainer max_step / max_epoch
+                trainer_max_step = self.trainer.max_steps
+                trainer_max_epoch = self.trainer.max_epochs
+                if trainer_max_step > 0:
+                    lr_total_step = trainer_max_step
+                elif trainer_max_epoch > 0:
+                    lr_total_step = trainer_max_epoch * self.num_step_per_epoch()
+                else :
+                    print("Warning: max_step/max_epoch not set, we would be performing lr_init to lr_final shift assuming 10 epoch")
+                    lr_total_step = 10 * self.num_step_per_epoch()
+            
+            else:
+                # Calculate lr_total_step based on lr_period
+                if self.lr_period_type == "step":
+                    lr_total_step = self.lr_period
+                elif self.lr_period_type == "epoch":
+                    lr_total_step = self.lr_period * self.num_step_per_epoch()
+                else:
+                    raise ValueError(f"lr_period_type {self.lr_period_type} not supported.")
+
+            # Lets initialize the lr_scheduler
+            if starting_lr > ending_lr:
+                # We jumpt the warmup process, and start the decay, to mimic the decay LR process
+                # (a compromise due to the lack of an actual decay LR scheduler in deepspeed)
+                lr_scheduler = deepspeed.runtime.lr_schedules.WarmupDecayLR(
+                    optimizer,
+                    warmup_min_lr=ending_lr,
+                    warmup_max_lr=starting_lr,
+                    warmup_num_steps=0,
+                    decay_start_step=lr_total_step,
+                )
+            else:
+                # Since the final LR is higher, we treat this as a LR warmup process
+                lr_scheduler = deepspeed.runtime.lr_schedules.WarmupLR(
+                    optimizer,
+                    warmup_min_lr=starting_lr,
+                    warmup_max_lr=ending_lr,
+                    warmup_num_steps=lr_total_step,
+                    warmup_type='linear'
+                )
+                
+            return optimizer, lr_scheduler
         else:
             return optimizer
+    
+    # We have to compute the number of steps per epoch ourselves
+    # as this value is not provided directly by pytorch lightning
+    # https://github.com/Lightning-AI/lightning/issues/5449#issuecomment-1501597319
+    def num_step_per_epoch(self) -> int:
+    
+        # Estimated number of steps in total, added as the following
+        # https://github.com/Lightning-AI/lightning/pull/11599
+        #
+        # This MUST be called before len(self.trainer.train_loader)
+        # otherwise there is a bug in which the train_dataloader is not
+        # fully initialized, which seems to be resolved by computing the 
+        # self.trainer.estimated_stepping_batches
+        estimated_stepping_batches = self.trainer.estimated_stepping_batches
 
+        # Get the number of epochs, 
+        # use estimated_stepping_batches if max_epochs is set
+        max_epochs = self.trainer.max_epochs
+        if max_epochs > 0:
+            return estimated_stepping_batches // max_epochs
+
+        # Max epoch is not set, use the train_dataloader
+        dataset_size = len(self.trainer.train_dataloader)
+        num_devices = max(1, self.trainer.num_devices)
+        num_steps = dataset_size // (self.trainer.accumulate_grad_batches * num_devices)
+        return num_steps
+    
     @property
     def deepspeed_offload(self) -> bool:
         strategy = self.trainer.strategy
