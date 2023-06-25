@@ -340,9 +340,6 @@ class RWKV(L.LightningModule):
         if ending_lr < 0:
             ending_lr = self.lr_init
 
-        if self.warmup_steps <= 0 and self.lr_period <= 0:
-            starting_lr = self.lr_final
-
         if self.deepspeed_offload:
             optimizer = DeepSpeedCPUAdam(optim_groups,
                                          lr=starting_lr,
@@ -375,10 +372,12 @@ class RWKV(L.LightningModule):
                 warmup_num_steps=self.warmup_steps,
                 warmup_type='linear')
 
-            return optimizer, lr_scheduler
+            return {
+                'optimizer': optimizer,
+                'lr_scheduler': lr_scheduler,
+            }
         
-        elif self.lr_period > 0:
-
+        else:
             # Skip the lr_scheduler process if lr_init and lr_final are the same
             if starting_lr == ending_lr:
                 return optimizer
@@ -398,7 +397,6 @@ class RWKV(L.LightningModule):
                 else :
                     print("Warning: max_step/max_epoch not set, we would be performing lr_init to lr_final shift assuming 10 epoch")
                     lr_total_step = 10 * self.num_step_per_epoch()
-            
             else:
                 # Calculate lr_total_step based on lr_period
                 if self.lr_period_type == "step":
@@ -409,29 +407,22 @@ class RWKV(L.LightningModule):
                     raise ValueError(f"lr_period_type {self.lr_period_type} not supported.")
 
             # Lets initialize the lr_scheduler
-            if starting_lr > ending_lr:
-                # We jumpt the warmup process, and start the decay, to mimic the decay LR process
-                # (a compromise due to the lack of an actual decay LR scheduler in deepspeed)
-                lr_scheduler = deepspeed.runtime.lr_schedules.WarmupDecayLR(
-                    optimizer,
-                    warmup_min_lr=ending_lr,
-                    warmup_max_lr=starting_lr,
-                    warmup_num_steps=0,
-                    decay_start_step=lr_total_step,
-                )
-            else:
-                # Since the final LR is higher, we treat this as a LR warmup process
-                lr_scheduler = deepspeed.runtime.lr_schedules.WarmupLR(
-                    optimizer,
-                    warmup_min_lr=starting_lr,
-                    warmup_max_lr=ending_lr,
-                    warmup_num_steps=lr_total_step,
-                    warmup_type='linear'
-                )
+            lr_scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer,
+                start_factor=1.0,
+                end_factor= ending_lr / starting_lr,
+                total_iters=lr_total_step
+            )
+
+            return {
+                'optimizer': optimizer,
+                'lr_scheduler': {
+                    "scheduler": lr_scheduler,
+                    "interval": "step",
+                    "frequency": 1,
+                },
+            }
                 
-            return optimizer, lr_scheduler
-        else:
-            return optimizer
     
     # We have to compute the number of steps per epoch ourselves
     # as this value is not provided directly by pytorch lightning

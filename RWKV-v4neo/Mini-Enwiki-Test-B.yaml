@@ -40,7 +40,7 @@ trainer:
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwikm09'
+      id: 'aenwikm11'
       save_dir: .
       version: null
       offline: false
