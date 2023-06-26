@@ -35,12 +35,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 mini-enwiki-test (lr 2.0e-4, wd 0.01, ctx 2048, data 2048, fixed seed)'
+      name: 'Echo-A-1B5 enwiki_100k foundation (fixed seed)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwikt07'
+      id: 'aenwiki11'
       save_dir: .
       version: null
       offline: false
@@ -104,7 +104,7 @@ trainer:
       # In general you will want to avoid putting a low number (expecially if accumulate_grad_batches <= 100)
       # as the checkpoint process, will pause all the gpu training for some time, slowing down the overall process
       # However you do not want to configure too high of a number, where you will lose too much progress if the training crashes
-      every_n_train_steps: 10
+      every_n_train_steps: 500
       every_n_epochs: null
       save_on_train_epoch_end: true
       train_time_interval: null
@@ -120,7 +120,7 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 10
+  max_epochs: 3
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -138,7 +138,7 @@ trainer:
   #
   # You are also recommended to configure this to a large enough number to fully utilize
   # your GPU processing time %, and avoid idle time for the GPU between batches
-  accumulate_grad_batches: 256
+  accumulate_grad_batches: 16
 
   # Various other settings, you probably want to leave alone
   fast_dev_run: false
@@ -191,7 +191,7 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 2048
+  ctx_len: 4096
   # Data samples would be cut down to the respective max ctx_len_cutoffs
   # values if its larger then ctx_len. If the data sample is larger then
   # the largest len_cutoff, the remaining data will be discarded
@@ -201,7 +201,22 @@ model:
   ctx_len_warmup_steps: [0, 0, 0, 0, 0]
 
   # Learning rate of the training process
-  lr_init: 2.0e-04
+  # ---
+  # Initia learning rate of the process
+  lr_init: 3e-4
+  # Final learning rate after the learning rate period
+  # learning rate will stay at final value from then onwards
+  #
+  # NOTE: lr_final / lr_period does not work with warmup_steps
+  #       and will be ignored (or replaced) with the warmup_steps logic instead
+  lr_final: 1e-5
+  # Number of epoch to reduce the learning rate from lr_init to lr_final
+  #  1 means a single epoch (so lr would be lr_final from epoch 2 onwards)
+  #  0 means lr_final will apply immediately
+  # -1 means we take the current max_step / max_epoch as the period
+  lr_period: -1
+  # lr_period type if its set, defaults to epoch
+  lr_period_type: epoch
 
   # Adam optimizer settings
   # You probably want to leave this alone, unless you know what you are doing
@@ -227,7 +242,7 @@ data:
   # Use this if you have built your own dataset and saved it with `save_to_disk()`
   # with source left as null. Other wise configure this to a directory which the 
   # dataset will be built and tokenized by the huggingface dataset process.
-  data_path: ../datapaths/enwiki_10k/
+  data_path: ../datapaths/enwiki_100k/
 
   # Other wise provide the source path, which is used as huggingface dataset path
   # this will be used to populate the dataset_path
@@ -240,7 +255,7 @@ data:
   # - null
   #
   # If source is disabled, all other params, except data_path, is ignored
-  source: "teven/enwiki_10k"
+  source: "teven/enwiki_100k"
   # source: text
   # source: /home/ubuntu/RWKV-LM-LoRA/dataset-text/enwik8.txt
 
@@ -264,7 +279,7 @@ data:
   # (eg. removal of small articles of less then 512 tokens from wikipedia)
   #
   # This is ignored, if set to -1
-  min_token_size: 64
+  min_token_size: 512
   max_token_size: -1
 
   # Rechunking of text dataset, this is done only when source is set as 'text'
@@ -275,12 +290,12 @@ data:
   # This is ignored, if source is not set as text
   # This is ignored, if set to zero
   # ---
-  text_rechunk_size: 2048
+  # text_rechunk_size: 2048
 
   # Apply text rechunk to the dataset, even if its not a 'text' source
   # This is done only after dataset filtering, and if source is not 'text'
   # ---
-  text_rechunk_force: true
+  # text_rechunk_force: false
 
   # Custom text column to use, useful for dataset with alternative training columns labels
   # This is checked before multi column merging, default is null (disabled)
