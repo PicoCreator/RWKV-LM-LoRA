@@ -32,42 +32,42 @@ trainer:
 
   # Logger setting for wandb, if you want to enable wandb, uncomment the whole logger section
   # ---
-  logger:
-    class_path: lightning.pytorch.loggers.WandbLogger
-    init_args:
-      name: 'Mini-Enwiki-Test-A (lr 3e-4/1e-5/5, wd 0.01, ctx 1024, data 1024, fixed seed, bs 16)'
-      # name: 'Echo-A-1B5 Foundation'
-      project: 'RWKV-Memory-Experiment'
-      tags: ['RWKV', 'memory-exp']
-      # id: 'aenwiki01'
-      id: 'aenwikm3A'
-      save_dir: .
-      version: null
-      offline: false
-      dir: null
-      anonymous: null
-      log_model: false
-      experiment: null
-      prefix: ''
-      checkpoint_name: null
-      job_type: null
-      config: null
-      entity: null
-      reinit: null
-      group: null
-      notes: null
-      magic: null
-      config_exclude_keys: null
-      config_include_keys: null
-      mode: null
-      allow_val_change: null
-      resume: null
-      force: null
-      tensorboard: null
-      sync_tensorboard: null
-      monitor_gym: null
-      save_code: null
-      settings: null
+  # logger:
+  #   class_path: lightning.pytorch.loggers.WandbLogger
+  #   init_args:
+  #     name: 'Mini-Enwiki-Test-A (lr 3e-4/1e-5/5, wd 0.01, ctx 1024, data 1024, fixed seed, bs 16)'
+  #     # name: 'Echo-A-1B5 Foundation'
+  #     project: 'RWKV-Memory-Experiment'
+  #     tags: ['RWKV', 'memory-exp']
+  #     # id: 'aenwiki01'
+  #     id: 'aenwikm3A'
+  #     save_dir: .
+  #     version: null
+  #     offline: false
+  #     dir: null
+  #     anonymous: null
+  #     log_model: false
+  #     experiment: null
+  #     prefix: ''
+  #     checkpoint_name: null
+  #     job_type: null
+  #     config: null
+  #     entity: null
+  #     reinit: null
+  #     group: null
+  #     notes: null
+  #     magic: null
+  #     config_exclude_keys: null
+  #     config_include_keys: null
+  #     mode: null
+  #     allow_val_change: null
+  #     resume: null
+  #     force: null
+  #     tensorboard: null
+  #     sync_tensorboard: null
+  #     monitor_gym: null
+  #     save_code: null
+  #     settings: null
   
   # Checkpoint settings for the training process
   callbacks:

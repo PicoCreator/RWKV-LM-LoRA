@@ -120,7 +120,7 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 5
+  max_epochs: 3
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -214,7 +214,7 @@ model:
   #  1 means a single epoch (so lr would be lr_final from epoch 2 onwards)
   #  0 means lr_final will apply immediately
   # -1 means we take the current max_step / max_epoch as the period
-  lr_period: -1
+  lr_period: 5
   # lr_period type if its set, defaults to epoch
   lr_period_type: epoch
 
