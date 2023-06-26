@@ -280,7 +280,7 @@ def get_data_module(
             if max_token_size > 0 and row_length > max_token_size:
                 return False
             return True
-        src_dataset = src_dataset.filter(dataset_filter)
+        src_dataset = src_dataset.filter(dataset_filter,num_proc=num_cpus)
 
         # Perform rechunking after filtering, if source is not a "text" based 
         # dataset and text_rechunk_force is enabled
