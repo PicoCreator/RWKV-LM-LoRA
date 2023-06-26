@@ -428,7 +428,6 @@ class RWKV(L.LightningModule):
     # as this value is not provided directly by pytorch lightning
     # https://github.com/Lightning-AI/lightning/issues/5449#issuecomment-1501597319
     def num_step_per_epoch(self) -> int:
-    
         # Estimated number of steps in total, added as the following
         # https://github.com/Lightning-AI/lightning/pull/11599
         #

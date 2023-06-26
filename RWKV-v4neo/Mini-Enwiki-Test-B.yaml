@@ -35,12 +35,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Mini-Enwiki-Test-B (lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed)'
+      name: 'Mini-Enwiki-Test-B (lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed, bs 16)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwikm11'
+      id: 'aenwikm22'
       save_dir: .
       version: null
       offline: false
@@ -104,7 +104,7 @@ trainer:
       # In general you will want to avoid putting a low number (expecially if accumulate_grad_batches <= 100)
       # as the checkpoint process, will pause all the gpu training for some time, slowing down the overall process
       # However you do not want to configure too high of a number, where you will lose too much progress if the training crashes
-      every_n_train_steps: 10
+      every_n_train_steps: 500
       every_n_epochs: null
       save_on_train_epoch_end: true
       train_time_interval: null
@@ -138,7 +138,7 @@ trainer:
   #
   # You are also recommended to configure this to a large enough number to fully utilize
   # your GPU processing time %, and avoid idle time for the GPU between batches
-  accumulate_grad_batches: 256
+  accumulate_grad_batches: 16
 
   # Various other settings, you probably want to leave alone
   fast_dev_run: false
@@ -212,9 +212,12 @@ model:
   #       and will be ignored (or replaced) with the warmup_steps logic instead
   lr_final: 1e-5
   # Number of epoch to reduce the learning rate from lr_init to lr_final
-  # 1 means a single epoch (so lr would be lr_final from epoch 2 onwards)
-  # 0 means lr_final will apply immediately
-  lr_period: 5
+  #  1 means a single epoch (so lr would be lr_final from epoch 2 onwards)
+  #  0 means lr_final will apply immediately
+  # -1 means we take the current max_step / max_epoch as the period
+  lr_period: -1
+  # lr_period type if its set, defaults to epoch
+  lr_period_type: epoch
 
   # Adam optimizer settings
   # You probably want to leave this alone, unless you know what you are doing
