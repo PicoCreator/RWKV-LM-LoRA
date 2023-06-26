@@ -11,6 +11,9 @@ The following venv setup using conda, modify for your use case respectively
 # ninja-build is required for the new trainer
 sudo apt-get install ninja-build
 
+# Ensure conda is up to date
+conda update conda
+
 # Virtual env, with python 3.11
 conda create -n rwkv-exp python=3.11 pip
 conda activate rwkv-exp
