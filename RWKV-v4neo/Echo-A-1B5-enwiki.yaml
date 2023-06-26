@@ -3,7 +3,7 @@ seed_everything: true
 trainer:
   # Configure the number of GPU, avaliable on your machine
   accelerator: gpu
-  devices: 1
+  devices: 8
   num_nodes: 1
 
   #
@@ -24,7 +24,7 @@ trainer:
   # For more details see:
   # https://lightning.ai/docs/pytorch/stable/advanced/model_parallel.html#deepspeed-zero-stage-2
   #
-  strategy: deepspeed_stage_2_offload
+  strategy: deepspeed_stage_2
 
   # Floating point precision for the model, because RWKV is built FOR bf16
   # you should pretty much never change this setting
@@ -35,12 +35,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 enwiki_100k foundation (fixed seed)'
+      name: 'Echo-A-1B5 enwiki_100k foundation (fixed seed, 8xGPU)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwiki11'
+      id: 'aenwikx01'
       save_dir: .
       version: null
       offline: false
