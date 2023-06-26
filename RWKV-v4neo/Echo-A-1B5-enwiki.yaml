@@ -24,7 +24,7 @@ trainer:
   # For more details see:
   # https://lightning.ai/docs/pytorch/stable/advanced/model_parallel.html#deepspeed-zero-stage-2
   #
-  strategy: deepspeed_stage_3
+  strategy: deepspeed_stage_2
 
   # Floating point precision for the model, because RWKV is built FOR bf16
   # you should pretty much never change this setting
