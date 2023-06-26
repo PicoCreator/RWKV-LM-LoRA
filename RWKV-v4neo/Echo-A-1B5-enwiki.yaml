@@ -120,7 +120,7 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 3
+  max_epochs: 5
   min_epochs: null
   max_steps: -1
   min_steps: null
