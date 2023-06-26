@@ -203,7 +203,7 @@ model:
   # Learning rate of the training process
   # ---
   # Initia learning rate of the process
-  lr_init: 3e-4
+  lr_init: 6e-4
   # Final learning rate after the learning rate period
   # learning rate will stay at final value from then onwards
   #
@@ -214,7 +214,7 @@ model:
   #  1 means a single epoch (so lr would be lr_final from epoch 2 onwards)
   #  0 means lr_final will apply immediately
   # -1 means we take the current max_step / max_epoch as the period
-  lr_period: 5
+  lr_period: 3
   # lr_period type if its set, defaults to epoch
   lr_period_type: epoch
 
