@@ -150,4 +150,7 @@ dmypy.json
 model/
 datapaths/
 checkpoint/
+node_modules/
+data_path/
+dataset/
 notes/

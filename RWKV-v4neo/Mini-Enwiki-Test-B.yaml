@@ -35,12 +35,12 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Mini-Enwiki-Test-B (lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed, bs 16)'
+      name: 'Mini-Enwiki-Test-B (fp64 loss calc, lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed, bs 16)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwikm22'
+      id: 'aenwikm42'
       save_dir: .
       version: null
       offline: false
@@ -104,7 +104,7 @@ trainer:
       # In general you will want to avoid putting a low number (expecially if accumulate_grad_batches <= 100)
       # as the checkpoint process, will pause all the gpu training for some time, slowing down the overall process
       # However you do not want to configure too high of a number, where you will lose too much progress if the training crashes
-      every_n_train_steps: 500
+      every_n_train_steps: 2500
       every_n_epochs: null
       save_on_train_epoch_end: true
       train_time_interval: null

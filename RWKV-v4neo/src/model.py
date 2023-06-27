@@ -511,32 +511,36 @@ class RWKV(L.LightningModule):
         C = self.n_embd
         total_mask_sum = torch.sum(seq_mask)
 
+        # We use a custom loss dtype, with higher accuracy, to reduce compounded floating loss
+        # errors over larger context size chunks. Its performance impact is expected to be minimal
+        loss_dtype=torch.float64;
+
         def checkpointed_step(idx, targets, mask, prev_loss, last_states,
                               prev_steps):
             logits, new_states = self(idx, last_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
-                                   targets.view(-1), reduction="none")
+                                   targets.view(-1), reduction="none").to(loss_dtype)
             submask = mask.view(-1)[:loss.shape[0]]
             submask_sum=torch.sum(submask)
 
             # Special handling of empty mask 
             # (possible when real_ctx_len is larger then ctx_len, which results into 'chunking')
             if(submask_sum==0):
-                loss = torch.sum(loss * submask) / 1
-                loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
+                loss = torch.sum(loss * submask.to(loss_dtype)).to(loss_dtype) / float(1)
+                loss = (L2Wrap.apply(loss, logits, total_mask_sum, submask)).to(loss_dtype)
                 new_steps = prev_steps # + submask_sum
                 new_loss = prev_loss+loss
                 return new_loss, new_states, new_steps
 
             # Handling with mask
-            loss = torch.sum(loss * submask) / submask_sum
-            loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
+            loss = torch.sum(loss * submask).to(loss_dtype) / submask_sum.to(loss_dtype)
+            loss = (L2Wrap.apply(loss, logits, total_mask_sum, submask)).to(loss_dtype)
             new_steps = prev_steps + submask_sum
-            new_loss = prev_loss * (prev_steps / new_steps) + loss * (
-                1 - prev_steps / new_steps)
+            new_loss = prev_loss * (float(prev_steps) / float(new_steps)) + loss * (
+                float(1) - float(prev_steps) / float(new_steps))
             return new_loss, new_states, new_steps
 
-        total_loss = torch.tensor(0, dtype=self.emb.weight.dtype)
+        total_loss = torch.tensor(0, dtype=loss_dtype)
         steps = 0
         states = [
             init_block_state(B, C, seq.device, self.emb.weight.dtype)
