@@ -35,12 +35,13 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Mini-Enwiki-Test-B (fp64 loss calc, lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed, bs 16)'
+      name: '[EXP] Mini-Enwiki-Test-B (array based blocks, no grad checkpoint, fp64 loss, lr 3e-4/1e-5/5, wd 0.01, ctx 128, data 1024, fixed seed, bs 16)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
-      tags: ['RWKV', 'memory-exp']
+      tags: ['RWKV', 'trainer-exp']
       # id: 'aenwiki01'
-      id: 'aenwikm42'
+      # id: 'aenwikm42'
+      id: null
       save_dir: .
       version: null
       offline: false
@@ -120,9 +121,9 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 5
+  max_epochs: -1
   min_epochs: null
-  max_steps: -1
+  max_steps: 1500
   min_steps: null
   max_time: null
 
@@ -151,7 +152,7 @@ trainer:
   check_val_every_n_epoch: 1
   num_sanity_val_steps: 0
   log_every_n_steps: 1
-  enable_checkpointing: null
+  enable_checkpointing: true
   enable_progress_bar: null
   enable_model_summary: null
   gradient_clip_val: 1.0

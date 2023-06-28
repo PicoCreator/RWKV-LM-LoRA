@@ -1,5 +1,6 @@
 #include "ATen/ATen.h"
 #include <torch/extension.h>
+#include <iostream>
 typedef at::BFloat16 bf16;
 
 void cuda_forward(int B, int T, int C, float *w, bf16 *u, bf16 *k, bf16 *v,
@@ -60,7 +61,9 @@ public:
     return {y, new_state};
   }
 
+  static int backward_counter;
   static tensor_list backward(AutogradContext *ctx, tensor_list grad_outputs) {
+    std::cerr << "[WKV::backward] Called for " << ++backward_counter << " times." << std::endl;
     auto gy = grad_outputs[0], gnew_state = grad_outputs[1];
     auto inputs = ctx->get_saved_variables();
     auto w = inputs[0], u = inputs[1], k = inputs[2], v = inputs[3],
@@ -85,6 +88,7 @@ public:
     return {gw.sum({0}), gu.sum({0}), gk, gv, glast_state};
   }
 };
+int WKVFunction::backward_counter = 0;
 
 tensor_list wkv(torch::Tensor w, torch::Tensor u, torch::Tensor k,
                 torch::Tensor v, torch::Tensor last_state) {

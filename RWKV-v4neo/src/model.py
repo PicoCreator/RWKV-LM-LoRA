@@ -7,6 +7,7 @@ from random import randint
 from typing import List, Optional
 import numpy as np
 import torch
+import copy
 # torch._C._jit_set_profiling_executor(True)
 # torch._C._jit_set_profiling_mode(True)
 import torch.nn as nn
@@ -30,34 +31,89 @@ else:
     MyFunction = lambda x: x
 
 
-class TimeMixState:
+# class TimeMixState:
 
-    def __init__(self, token_shift_state: torch.Tensor,
-                 wkv_state: torch.Tensor):
-        self.token_shift_state = token_shift_state
-        self.wkv_state = wkv_state
-
-
-class ChannelMixState:
-
-    def __init__(self, token_shift_state: torch.Tensor):
-        self.token_shift_state = token_shift_state
+#     def __init__(self, token_shift_state: torch.Tensor,
+#                  wkv_state: torch.Tensor):
+#         self.token_shift_state = token_shift_state
+#         self.wkv_state = wkv_state
 
 
-class BlockState:
+# class ChannelMixState:
 
-    def __init__(self, time_mix_state: torch.Tensor,
-                 channel_mix_state: torch.Tensor):
-        self.time_mix_state = time_mix_state
-        self.channel_mix_state = channel_mix_state
+#     def __init__(self, token_shift_state: torch.Tensor):
+#         self.token_shift_state = token_shift_state
 
+
+# class BlockState:
+#     def __init__(self, time_mix_state: torch.Tensor,
+#                  channel_mix_state: torch.Tensor):
+#         self.time_mix_state = time_mix_state
+#         self.channel_mix_state = channel_mix_state
+
+# class TimeMixState:
+
+#     def __init__(self, token_shift_state: torch.Tensor,
+#                  wkv_state: torch.Tensor):
+#         self[0] = token_shift_state
+#         self[1] = wkv_state
+    
+#     @property
+#     def token_shift_state(self):
+#         return self[0]
+#     @token_shift_state.setter
+#     def token_shift_state(self, value):
+#         self[0] = value
+
+#     @property
+#     def wkv_state(self):
+#         return self[1]
+#     @wkv_state.setter
+#     def wkv_state(self, value):
+#         self[1] = value
+
+
+# class ChannelMixState(list):
+#     def __init__(self, token_shift_state: torch.Tensor):
+#         self[0] = token_shift_state
+    
+#     @property
+#     def token_shift_state(self):
+#         return self[0]
+#     @token_shift_state.setter
+#     def token_shift_state(self, value):
+#         self[0] = value
+
+
+# class BlockState(list):
+#     def __init__(self, time_mix_state: torch.Tensor,
+#                  channel_mix_state: torch.Tensor):
+#         self[0] = time_mix_state
+#         self[1] = channel_mix_state
+    
+#     @property
+#     def time_mix_state(self):
+#         return self[0]
+#     @time_mix_state.setter
+#     def time_mix_state(self, value):
+#         self[0] = value
+    
+#     @property
+#     def channel_mix_state(self):
+#         return self[1]
+#     @channel_mix_state.setter
+#     def channel_mix_state(self, value):
+#         self[1] = value
 
 def init_block_state(B, C, device, dtype):
     wkv_state = torch.zeros((B, C, 3), device=device, dtype=torch.float)
     wkv_state[:, :, -1] = -1e38
-    token_shift_state = torch.zeros((B, C), device=device, dtype=dtype)
-    return BlockState(TimeMixState(token_shift_state, wkv_state),
-                      ChannelMixState(token_shift_state))
+    wkv_state.requires_grad_()
+    token_shift_state = torch.zeros((B, C), device=device, dtype=dtype).requires_grad_()
+    # return BlockState(TimeMixState(token_shift_state, wkv_state),
+    #                   ChannelMixState(token_shift_state))
+    return [[token_shift_state, wkv_state],
+                      [token_shift_state]]
 
 
 from torch.utils.cpp_extension import load
@@ -106,11 +162,14 @@ class RWKV_TimeMix(MyModule):
         self.receptance = nn.Linear(n_embd, dim_att, bias=False)
         self.output = nn.Linear(dim_att, n_embd, bias=False)
 
+    # @MyFunction
+    # def forward(self, x, last_state: TimeMixState):
     @MyFunction
-    def forward(self, x, last_state: TimeMixState):
+    def forward(self, x, last_state: List[torch.Tensor]):
         # Mix x with the previous timestep to produce xk, xv, xr
         xx = torch.concat(
-            (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
+            # (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
+            (last_state[0].unsqueeze(1), x[:, :-1]), dim=1)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -122,8 +181,10 @@ class RWKV_TimeMix(MyModule):
         sr = torch.sigmoid(r)
 
         y, new_wkv_state = torch.ops.rwkv.wkv(self.time_decay, self.time_first,
-                                              k, v, last_state.wkv_state)
-        return self.output(sr * y), TimeMixState(x[:, -1], new_wkv_state)
+                                            #   k, v, last_state.wkv_state)
+                                              k, v, last_state[1])
+        # return self.output(sr * y), TimeMixState(x[:, -1], new_wkv_state)
+        return self.output(sr * y), [x[:, -1], new_wkv_state]
 
 
 ########################################################################################################
@@ -147,16 +208,20 @@ class RWKV_ChannelMix(MyModule):
         self.value = nn.Linear(dim_ffn, n_embd, bias=False)
 
     @MyFunction
-    def forward(self, x, last_state: ChannelMixState):
+    # def forward(self, x, last_state: ChannelMixState):
+    def forward(self, x, last_state: List[torch.Tensor]):
         xx = torch.concat(
-            (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
+            # (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
+            (last_state[0].unsqueeze(1), x[:, :-1]), dim=1)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         k = self.key(xk)
         k = torch.square(torch.relu(k))
         kv = self.value(k)
+        # return (torch.sigmoid(self.receptance(xr)) * kv,
+        #         ChannelMixState(x[:, -1]))
         return (torch.sigmoid(self.receptance(xr)) * kv,
-                ChannelMixState(x[:, -1]))
+                [x[:, -1]])
 
 
 ########################################################################################################
@@ -179,20 +244,24 @@ class Block(nn.Module):
         self.att = RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att)
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
-    def forward(self, x, last_state: BlockState):
+    # def forward(self, x, last_state: BlockState):
+    def forward(self, x, last_state: List[torch.Tensor]):
         if self.layer_id == 0:
             x = self.ln0(x)
         att_out, att_state = self.att(
             self.ln1(x),
-            last_state.time_mix_state,
+            # last_state.time_mix_state,
+            last_state[0]
         )
         x = x + att_out
         ffn_out, ffn_state = self.ffn(
             self.ln2(x),
-            last_state.channel_mix_state,
+            # last_state.channel_mix_state,
+            last_state[1]
         )
         x = x + ffn_out
-        return x, BlockState(att_state, ffn_state)
+        # return x, BlockState(att_state, ffn_state)
+        return x, [att_state, ffn_state]
 
 
 class L2Wrap(torch.autograd.Function):
@@ -206,6 +275,10 @@ class L2Wrap(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        # y, = ctx.saved_tensors
+        # gy = torch.zeros_like(y)
+        # return (grad_output, gy, None, None)
+        # return (grad_output, None, None, None)
         y, = ctx.saved_tensors
         token_amount = ctx.token_amount
         # to encourage the logits to be close to 0
@@ -259,6 +332,14 @@ class RWKV(L.LightningModule):
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
+
+        # # Experimental contigious checkpointing
+        # deepspeed.checkpointing.configure(
+        #     None,
+        #     partition_activations=True,
+        #     contiguous_checkpointing=True,
+        #     num_checkpoints=16
+        # );
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -457,7 +538,8 @@ class RWKV(L.LightningModule):
             return "offload_optimizer" in cfg or "offload_parameters" in cfg
         return False
 
-    def forward(self, idx, last_states: List[BlockState]):
+    # def forward(self, idx, last_states: List[BlockState]):
+    def forward(self, idx, last_states: List[List[torch.Tensor]]):
         B, T = idx.size()
         assert T <= self.ctx_len, "Cannot forward, model ctx_len is exhausted."
 
@@ -517,9 +599,12 @@ class RWKV(L.LightningModule):
 
         def checkpointed_step(idx, targets, mask, prev_loss, last_states,
                               prev_steps):
+            # Detach previous loss
+            # prev_loss = prev_loss.clone().detach().requires_grad_(False)
+
             logits, new_states = self(idx, last_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
-                                   targets.view(-1), reduction="none").to(loss_dtype)
+                                   targets.view(-1), reduction="none").to(loss_dtype).requires_grad_(True)
             submask = mask.view(-1)[:loss.shape[0]]
             submask_sum=torch.sum(submask)
 
@@ -530,6 +615,7 @@ class RWKV(L.LightningModule):
                 loss = (L2Wrap.apply(loss, logits, total_mask_sum, submask)).to(loss_dtype)
                 new_steps = prev_steps # + submask_sum
                 new_loss = prev_loss+loss
+                new_loss.requires_grad_(True)
                 return new_loss, new_states, new_steps
 
             # Handling with mask
@@ -538,33 +624,81 @@ class RWKV(L.LightningModule):
             new_steps = prev_steps + submask_sum
             new_loss = prev_loss * (float(prev_steps) / float(new_steps)) + loss * (
                 float(1) - float(prev_steps) / float(new_steps))
+            new_loss.requires_grad_(True)
             return new_loss, new_states, new_steps
 
-        total_loss = torch.tensor(0, dtype=loss_dtype)
+        total_loss = torch.tensor(0, dtype=loss_dtype).requires_grad_(True)
         steps = 0
         states = [
             init_block_state(B, C, seq.device, self.emb.weight.dtype)
         ] * self.n_layer
+
+        # deepspeed.checkpointing.reset(); # Reset the checkpointing state
+
         for i in range(math.ceil(T / self.ctx_len)):
             if i != math.ceil(T / self.ctx_len) - 1:
-                total_loss, states, steps = deepspeed.checkpointing.checkpoint(
+                print("# i(d): ", i)
+                # loss_part, states, steps = checkpointed_step(
+                loss_part, states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
+                    torch.tensor(0, dtype=loss_dtype).requires_grad_(True),
                     states,
                     steps,
                 )
+
+                total_loss = total_loss + loss_part
+                # total_loss, states, steps = torch.utils.checkpoint.checkpoint(
+                #     checkpointed_step,
+                #     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                #     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                #     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                #     total_loss.clone().detach().requires_grad_(False),
+                #     states,
+                #     steps,
+                # )
             else:
-                total_loss, states, steps = checkpointed_step(
+                print("# i(s): ", i)
+                # loss_part, states, steps = checkpointed_step(
+                loss_part, states, steps = deepspeed.checkpointing.checkpoint(
+                    checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
+                    torch.tensor(0, dtype=loss_dtype).requires_grad_(True),
                     states,
                     steps,
                 )
+                total_loss = total_loss + loss_part
+        
+        # # Prepare the checkpoint_sequential array
+        # checkpoint_seq = []
+
+        # def seq_wrapper(i):
+        #     def forward(prv_loss, prv_states, prv_steps):
+        #         loss, state, step = checkpointed_step(
+        #             idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+        #             targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+        #             seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+        #             prv_loss, prv_states, prv_steps
+        #         )
+        #         return loss, state, step
+        #     return forward
+        
+        # segment_range = math.ceil(T / self.ctx_len)
+        # for i in range(segment_range):
+        #     checkpoint_seq.append(seq_wrapper(i))
+        
+        # # 
+        # total_loss, states, steps = torch.utils.checkpoint.checkpoint_sequential(
+        #     checkpoint_seq,
+        #     segment_range - 1,
+        #     ( total_loss,
+        #     states,
+        #     steps ),
+        # )
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
@@ -578,6 +712,8 @@ class RWKV(L.LightningModule):
                 'trainer/learning_rate': lr
             })
 
+        print("## Returing total_loss: ", total_loss)
+
         return total_loss
 
     def training_step(self, batch, batch_idx):
@@ -586,6 +722,7 @@ class RWKV(L.LightningModule):
         return total_loss
 
     def validation_step(self, batch, batch_idx):
+        # raise NotImplementedError("Validation step is not implemented")
         total_loss = self.compute_loss(batch, batch_idx, False)
         self.log('validation/loss', total_loss, prog_bar=True, sync_dist=True)
         return total_loss
