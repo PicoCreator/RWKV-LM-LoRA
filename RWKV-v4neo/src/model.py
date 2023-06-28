@@ -537,7 +537,7 @@ class RWKV(L.LightningModule):
         optimizer.zero_grad()
 
         # Lets loop through all the segments
-        for i in range(segments - 1, 0, -1):
+        for i in range(segments - 1, -1, -1):
             print("# b(p) = ", i)
             self.manual_backward(total_loss_arr[i])
             total_loss = total_loss + total_loss_arr[i].clone().detach().requires_grad_(False)
