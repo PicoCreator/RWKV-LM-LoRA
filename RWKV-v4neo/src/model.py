@@ -2,16 +2,17 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import os, math, sys
+import gc, math
 from random import randint
 from typing import List, Optional
+
 import numpy as np
 import torch
-import copy
 # torch._C._jit_set_profiling_executor(True)
 # torch._C._jit_set_profiling_mode(True)
 import torch.nn as nn
 from torch.nn import functional as F
+
 import lightning as L
 from lightning.pytorch.utilities import rank_zero_info, rank_zero_only
 from lightning.pytorch.strategies import DeepSpeedStrategy
@@ -31,89 +32,58 @@ else:
     MyFunction = lambda x: x
 
 
-# class TimeMixState:
+class TimeMixState:
 
-#     def __init__(self, token_shift_state: torch.Tensor,
-#                  wkv_state: torch.Tensor):
-#         self.token_shift_state = token_shift_state
-#         self.wkv_state = wkv_state
-
-
-# class ChannelMixState:
-
-#     def __init__(self, token_shift_state: torch.Tensor):
-#         self.token_shift_state = token_shift_state
+    def __init__(self, shift_state: torch.Tensor, wkv_state: torch.Tensor):
+        self.shift_state = shift_state
+        self.wkv_state = wkv_state
 
 
-# class BlockState:
-#     def __init__(self, time_mix_state: torch.Tensor,
-#                  channel_mix_state: torch.Tensor):
-#         self.time_mix_state = time_mix_state
-#         self.channel_mix_state = channel_mix_state
+class ChannelMixState:
 
-# class TimeMixState:
-
-#     def __init__(self, token_shift_state: torch.Tensor,
-#                  wkv_state: torch.Tensor):
-#         self[0] = token_shift_state
-#         self[1] = wkv_state
-    
-#     @property
-#     def token_shift_state(self):
-#         return self[0]
-#     @token_shift_state.setter
-#     def token_shift_state(self, value):
-#         self[0] = value
-
-#     @property
-#     def wkv_state(self):
-#         return self[1]
-#     @wkv_state.setter
-#     def wkv_state(self, value):
-#         self[1] = value
+    def __init__(self, shift_state: torch.Tensor):
+        self.shift_state = shift_state
 
 
-# class ChannelMixState(list):
-#     def __init__(self, token_shift_state: torch.Tensor):
-#         self[0] = token_shift_state
-    
-#     @property
-#     def token_shift_state(self):
-#         return self[0]
-#     @token_shift_state.setter
-#     def token_shift_state(self, value):
-#         self[0] = value
+class BlockState:
+
+    def __init__(self, time_mix_state: TimeMixState,
+                 channel_mix_state: ChannelMixState):
+        self.time_mix_state = time_mix_state
+        self.channel_mix_state = channel_mix_state
 
 
-# class BlockState(list):
-#     def __init__(self, time_mix_state: torch.Tensor,
-#                  channel_mix_state: torch.Tensor):
-#         self[0] = time_mix_state
-#         self[1] = channel_mix_state
-    
-#     @property
-#     def time_mix_state(self):
-#         return self[0]
-#     @time_mix_state.setter
-#     def time_mix_state(self, value):
-#         self[0] = value
-    
-#     @property
-#     def channel_mix_state(self):
-#         return self[1]
-#     @channel_mix_state.setter
-#     def channel_mix_state(self, value):
-#         self[1] = value
+class BlockStateList:
 
-def init_block_state(B, C, device, dtype):
-    wkv_state = torch.zeros((B, C, 3), device=device, dtype=torch.float)
-    wkv_state[:, :, -1] = -1e38
-    wkv_state.requires_grad_()
-    token_shift_state = torch.zeros((B, C), device=device, dtype=dtype).requires_grad_()
-    # return BlockState(TimeMixState(token_shift_state, wkv_state),
-    #                   ChannelMixState(token_shift_state))
-    return [[token_shift_state, wkv_state],
-                      [token_shift_state]]
+    def __init__(self, shift_states, wkv_states):
+        self.wkv_states = wkv_states
+        self.shift_states = shift_states
+
+    @staticmethod
+    def create(N, B, C, device, dtype):
+        result = BlockStateList.empty(N, B, C, device, dtype)
+        result.wkv_states[:] = 0
+        result.wkv_states[:, :, :, -1] = -1e38
+        result.shift_states[:] = 0
+        return result
+
+    @staticmethod
+    def empty(N, B, C, device, dtype):
+        wkv_states = torch.empty((N, B, C, 3),
+                                 device=device,
+                                 dtype=torch.float)
+        shift_states = torch.empty((N, 2, B, C), device=device, dtype=dtype)
+        return BlockStateList(shift_states, wkv_states)
+
+    def __getitem__(self, layer: int):
+        return BlockState(
+            TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
+            ChannelMixState(self.shift_states[layer, 1]))
+
+    def __setitem__(self, layer: int, state: BlockState):
+        self.shift_states[layer, 0] = state.time_mix_state.shift_state
+        self.wkv_states[layer] = state.time_mix_state.wkv_state
+        self.shift_states[layer, 1] = state.channel_mix_state.shift_state
 
 
 from torch.utils.cpp_extension import load
@@ -162,14 +132,11 @@ class RWKV_TimeMix(MyModule):
         self.receptance = nn.Linear(n_embd, dim_att, bias=False)
         self.output = nn.Linear(dim_att, n_embd, bias=False)
 
-    # @MyFunction
-    # def forward(self, x, last_state: TimeMixState):
     @MyFunction
-    def forward(self, x, last_state: List[torch.Tensor]):
+    def forward(self, x, last_state: TimeMixState):
         # Mix x with the previous timestep to produce xk, xv, xr
-        xx = torch.concat(
-            # (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
-            (last_state[0].unsqueeze(1), x[:, :-1]), dim=1)
+        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+                          dim=1)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -181,10 +148,8 @@ class RWKV_TimeMix(MyModule):
         sr = torch.sigmoid(r)
 
         y, new_wkv_state = torch.ops.rwkv.wkv(self.time_decay, self.time_first,
-                                            #   k, v, last_state.wkv_state)
-                                              k, v, last_state[1])
-        # return self.output(sr * y), TimeMixState(x[:, -1], new_wkv_state)
-        return self.output(sr * y), [x[:, -1], new_wkv_state]
+                                              k, v, last_state.wkv_state)
+        return self.output(sr * y), TimeMixState(x[:, -1], new_wkv_state)
 
 
 ########################################################################################################
@@ -208,20 +173,16 @@ class RWKV_ChannelMix(MyModule):
         self.value = nn.Linear(dim_ffn, n_embd, bias=False)
 
     @MyFunction
-    # def forward(self, x, last_state: ChannelMixState):
-    def forward(self, x, last_state: List[torch.Tensor]):
-        xx = torch.concat(
-            # (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
-            (last_state[0].unsqueeze(1), x[:, :-1]), dim=1)
+    def forward(self, x, last_state: ChannelMixState):
+        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+                          dim=1)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         k = self.key(xk)
         k = torch.square(torch.relu(k))
         kv = self.value(k)
-        # return (torch.sigmoid(self.receptance(xr)) * kv,
-        #         ChannelMixState(x[:, -1]))
         return (torch.sigmoid(self.receptance(xr)) * kv,
-                [x[:, -1]])
+                ChannelMixState(x[:, -1]))
 
 
 ########################################################################################################
@@ -244,24 +205,20 @@ class Block(nn.Module):
         self.att = RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att)
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
-    # def forward(self, x, last_state: BlockState):
-    def forward(self, x, last_state: List[torch.Tensor]):
+    def forward(self, x, last_state: BlockState):
         if self.layer_id == 0:
             x = self.ln0(x)
         att_out, att_state = self.att(
             self.ln1(x),
-            # last_state.time_mix_state,
-            last_state[0]
+            last_state.time_mix_state,
         )
         x = x + att_out
         ffn_out, ffn_state = self.ffn(
             self.ln2(x),
-            # last_state.channel_mix_state,
-            last_state[1]
+            last_state.channel_mix_state,
         )
         x = x + ffn_out
-        # return x, BlockState(att_state, ffn_state)
-        return x, [att_state, ffn_state]
+        return x, BlockState(att_state, ffn_state)
 
 
 class L2Wrap(torch.autograd.Function):
@@ -275,10 +232,6 @@ class L2Wrap(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        # y, = ctx.saved_tensors
-        # gy = torch.zeros_like(y)
-        # return (grad_output, gy, None, None)
-        # return (grad_output, None, None, None)
         y, = ctx.saved_tensors
         token_amount = ctx.token_amount
         # to encourage the logits to be close to 0
@@ -286,7 +239,7 @@ class L2Wrap(torch.autograd.Function):
         maxx, ids = torch.max(y, -1, keepdim=True)
         gy = torch.zeros_like(y)
         gy.scatter_(-1, ids, maxx * factor)
-        gy=gy*ctx.currentMask[:,None][None,:]
+        gy = gy * ctx.currentMask[:, None][None, :]
         return (grad_output, gy, None, None)
 
 
@@ -301,9 +254,6 @@ class RWKV(L.LightningModule):
                  vocab_size: int,
                  grad_cp: bool,
                  lr_init: float,
-                 lr_final: float = -1.0,
-                 lr_period: int = -1,
-                 lr_period_type: str = 'epoch',
                  warmup_steps: int = -1,
                  beta1: float = 0.9,
                  beta2: float = 0.99,
@@ -324,22 +274,11 @@ class RWKV(L.LightningModule):
         self.layerwise_lr = layerwise_lr
         self.grad_cp = grad_cp
         self.lr_init = lr_init
-        self.lr_final = lr_final
-        self.lr_period = lr_period
-        self.lr_period_type = lr_period_type
         self.warmup_steps = warmup_steps
         self.beta1 = beta1
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
-
-        # # Experimental contigious checkpointing
-        # deepspeed.checkpointing.configure(
-        #     None,
-        #     partition_activations=True,
-        #     contiguous_checkpointing=True,
-        #     num_checkpoints=16
-        # );
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -415,15 +354,9 @@ class RWKV(L.LightningModule):
                 },
             ]
 
-        # Set ending_lr to starting_lr, as default behavior
-        starting_lr = self.lr_init
-        ending_lr = self.lr_final
-        if ending_lr < 0:
-            ending_lr = self.lr_init
-
         if self.deepspeed_offload:
             optimizer = DeepSpeedCPUAdam(optim_groups,
-                                         lr=starting_lr,
+                                         lr=self.lr_init,
                                          betas=(self.beta1, self.beta2),
                                          eps=self.adam_eps,
                                          bias_correction=True,
@@ -432,18 +365,13 @@ class RWKV(L.LightningModule):
                                          amsgrad=False)
         else:
             optimizer = FusedAdam(optim_groups,
-                                  lr=starting_lr,
+                                  lr=self.lr_init,
                                   betas=(self.beta1, self.beta2),
                                   eps=self.adam_eps,
                                   bias_correction=True,
                                   adam_w_mode=False,
                                   weight_decay=self.weight_decay,
                                   amsgrad=False)
-            
-        # Throw if wramup_steps and lr_period are both set (not supported)
-        if self.warmup_steps > 0 and self.lr_period > 0:
-            raise ValueError(
-                "Use either warmup_steps or lr_period, not both.")
 
         if self.warmup_steps > 0:
             lr_scheduler = deepspeed.runtime.lr_schedules.WarmupLR(
@@ -453,83 +381,10 @@ class RWKV(L.LightningModule):
                 warmup_num_steps=self.warmup_steps,
                 warmup_type='linear')
 
-            return {
-                'optimizer': optimizer,
-                'lr_scheduler': lr_scheduler,
-            }
-        
+            return optimizer, lr_scheduler
         else:
-            # Skip the lr_scheduler process if lr_init and lr_final are the same
-            if starting_lr == ending_lr:
-                return optimizer
+            return optimizer
 
-            # The total number of steps to perform training rate decay with
-            lr_total_step = 0
-
-            # Handle lr_period -1 default behaviour of using the max_step / max_epoch
-            if self.lr_period == -1:
-                # Get trainer max_step / max_epoch
-                trainer_max_step = self.trainer.max_steps
-                trainer_max_epoch = self.trainer.max_epochs
-                if trainer_max_step > 0:
-                    lr_total_step = trainer_max_step
-                elif trainer_max_epoch > 0:
-                    lr_total_step = trainer_max_epoch * self.num_step_per_epoch()
-                else :
-                    print("Warning: max_step/max_epoch not set, we would be performing lr_init to lr_final shift assuming 10 epoch")
-                    lr_total_step = 10 * self.num_step_per_epoch()
-            else:
-                # Calculate lr_total_step based on lr_period
-                if self.lr_period_type == "step":
-                    lr_total_step = self.lr_period
-                elif self.lr_period_type == "epoch":
-                    lr_total_step = self.lr_period * self.num_step_per_epoch()
-                else:
-                    raise ValueError(f"lr_period_type {self.lr_period_type} not supported.")
-
-            # Lets initialize the lr_scheduler
-            lr_scheduler = torch.optim.lr_scheduler.LinearLR(
-                optimizer,
-                start_factor=1.0,
-                end_factor= ending_lr / starting_lr,
-                total_iters=lr_total_step
-            )
-
-            return {
-                'optimizer': optimizer,
-                'lr_scheduler': {
-                    "scheduler": lr_scheduler,
-                    "interval": "step",
-                    "frequency": 1,
-                },
-            }
-                
-    
-    # We have to compute the number of steps per epoch ourselves
-    # as this value is not provided directly by pytorch lightning
-    # https://github.com/Lightning-AI/lightning/issues/5449#issuecomment-1501597319
-    def num_step_per_epoch(self) -> int:
-        # Estimated number of steps in total, added as the following
-        # https://github.com/Lightning-AI/lightning/pull/11599
-        #
-        # This MUST be called before len(self.trainer.train_loader)
-        # otherwise there is a bug in which the train_dataloader is not
-        # fully initialized, which seems to be resolved by computing the 
-        # self.trainer.estimated_stepping_batches
-        estimated_stepping_batches = self.trainer.estimated_stepping_batches
-
-        # Get the number of epochs, 
-        # use estimated_stepping_batches if max_epochs is set
-        max_epochs = self.trainer.max_epochs
-        if max_epochs > 0:
-            return estimated_stepping_batches // max_epochs
-
-        # Max epoch is not set, use the train_dataloader
-        dataset_size = len(self.trainer.train_dataloader)
-        num_devices = max(1, self.trainer.num_devices)
-        num_steps = dataset_size // (self.trainer.accumulate_grad_batches * num_devices)
-        return num_steps
-    
     @property
     def deepspeed_offload(self) -> bool:
         strategy = self.trainer.strategy
@@ -538,27 +393,30 @@ class RWKV(L.LightningModule):
             return "offload_optimizer" in cfg or "offload_parameters" in cfg
         return False
 
-    # def forward(self, idx, last_states: List[BlockState]):
-    def forward(self, idx, last_states: List[List[torch.Tensor]]):
+    def forward(self, idx: torch.Tensor, last_shift_states: torch.Tensor,
+                last_wkv_states: torch.Tensor):
         B, T = idx.size()
         assert T <= self.ctx_len, "Cannot forward, model ctx_len is exhausted."
 
         x = self.emb(idx)
 
-        new_states = []
-        for block, last_state in zip(self.blocks, last_states):
+        new_states = BlockStateList.empty(self.n_layer, B, self.n_embd,
+                                          x.device, x.dtype)
+        for i, (block, last_state) in enumerate(
+                zip(self.blocks,
+                    BlockStateList(last_shift_states, last_wkv_states))):
             if self.grad_cp:
                 x, new_state = deepspeed.checkpointing.checkpoint(
                     block, x, last_state)
             else:
                 x, new_state = block(x, last_state)
-            new_states.append(new_state)
+            new_states[i] = new_state
 
         x = self.ln_out(x)
 
         x = self.head(x)
 
-        return x, new_states
+        return x, new_states.shift_states, new_states.wkv_states
 
     def compute_loss(self, batch, batch_idx, do_cutoff: bool):
         seq = batch['input_ids']
@@ -568,14 +426,15 @@ class RWKV(L.LightningModule):
         # Check if attent mask is set, if not initialize it
         if seq_mask is None or seq_mask.ndim != 2:
             seq_mask = torch.ones_like(seq[:, 1:])
-        
+
         if do_cutoff:
             prev_step = 0
             for step, len_cut in zip(self.ctx_len_warmup_steps,
-                                    self.ctx_len_cutoffs):
-                if prev_step <= self.global_step < step and len_cut < seq.shape[1] - 1:
+                                     self.ctx_len_cutoffs):
+                if prev_step <= self.global_step < step and len_cut < seq.shape[
+                        1] - 1:
                     pos = randint(0, seq.shape[1] - len_cut - 1)
-                    
+
                     # Original
                     # seq = seq[:, pos:pos + len_cut + 1]
 
@@ -593,126 +452,72 @@ class RWKV(L.LightningModule):
         C = self.n_embd
         total_mask_sum = torch.sum(seq_mask)
 
-        # We use a custom loss dtype, with higher accuracy, to reduce compounded floating loss
-        # errors over larger context size chunks. Its performance impact is expected to be minimal
-        loss_dtype=torch.float64;
-
-        def checkpointed_step(idx, targets, mask, prev_loss, last_states,
-                              prev_steps):
-            # Detach previous loss
-            # prev_loss = prev_loss.clone().detach().requires_grad_(False)
-
-            logits, new_states = self(idx, last_states)
+        def checkpointed_step(idx, targets, mask, prev_loss, last_shift_states,
+                              last_wkv_states, prev_steps):
+            logits, new_shift_states, new_wkv_states = self(
+                idx, last_shift_states, last_wkv_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
-                                   targets.view(-1), reduction="none").to(loss_dtype).requires_grad_(True)
+                                   targets.view(-1),
+                                   reduction="none")
             submask = mask.view(-1)[:loss.shape[0]]
-            submask_sum=torch.sum(submask)
+            submask_sum = torch.sum(submask)
 
-            # Special handling of empty mask 
+            # Special handling of empty mask
             # (possible when real_ctx_len is larger then ctx_len, which results into 'chunking')
-            if(submask_sum==0):
-                loss = torch.sum(loss * submask.to(loss_dtype)).to(loss_dtype) / float(1)
-                loss = (L2Wrap.apply(loss, logits, total_mask_sum, submask)).to(loss_dtype)
-                new_steps = prev_steps # + submask_sum
-                new_loss = prev_loss+loss
-                new_loss.requires_grad_(True)
-                return new_loss, new_states, new_steps
+            if submask_sum == 0:
+                loss = torch.sum(loss * submask) / 1
+                loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
+                new_steps = prev_steps  # + submask_sum
+                new_loss = prev_loss + loss
+            else:
+                # Handling with mask
+                loss = torch.sum(loss * submask) / submask_sum
+                loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
+                new_steps = prev_steps + submask_sum
+                new_loss = prev_loss * (prev_steps / new_steps) + loss * (
+                    1 - prev_steps / new_steps)
 
-            # Handling with mask
-            loss = torch.sum(loss * submask).to(loss_dtype) / submask_sum.to(loss_dtype)
-            loss = (L2Wrap.apply(loss, logits, total_mask_sum, submask)).to(loss_dtype)
-            new_steps = prev_steps + submask_sum
-            new_loss = prev_loss * (float(prev_steps) / float(new_steps)) + loss * (
-                float(1) - float(prev_steps) / float(new_steps))
-            new_loss.requires_grad_(True)
-            return new_loss, new_states, new_steps
+            return new_loss, new_shift_states, new_wkv_states, new_steps
 
-        total_loss = torch.tensor(0, dtype=loss_dtype).requires_grad_(True)
+        total_loss = torch.tensor(
+            0, dtype=self.emb.weight.dtype).requires_grad_()
         steps = 0
-        states = [
-            init_block_state(B, C, seq.device, self.emb.weight.dtype)
-        ] * self.n_layer
-
-        # deepspeed.checkpointing.reset(); # Reset the checkpointing state
-
+        states = BlockStateList.create(self.n_layer, B, C, seq.device,
+                                       self.emb.weight.dtype)
         for i in range(math.ceil(T / self.ctx_len)):
             if i != math.ceil(T / self.ctx_len) - 1:
-                print("# i(d): ", i)
-                # loss_part, states, steps = checkpointed_step(
-                loss_part, states, steps = deepspeed.checkpointing.checkpoint(
+                total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    torch.tensor(0, dtype=loss_dtype).requires_grad_(True),
-                    states,
+                    total_loss,
+                    states.shift_states,
+                    states.wkv_states,
                     steps,
                 )
-
-                total_loss = total_loss + loss_part
-                # total_loss, states, steps = torch.utils.checkpoint.checkpoint(
-                #     checkpointed_step,
-                #     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                #     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                #     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                #     total_loss.clone().detach().requires_grad_(False),
-                #     states,
-                #     steps,
-                # )
             else:
-                print("# i(s): ", i)
-                # loss_part, states, steps = checkpointed_step(
-                loss_part, states, steps = deepspeed.checkpointing.checkpoint(
-                    checkpointed_step,
+                total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    torch.tensor(0, dtype=loss_dtype).requires_grad_(True),
-                    states,
+                    total_loss,
+                    states.shift_states,
+                    states.wkv_states,
                     steps,
                 )
-                total_loss = total_loss + loss_part
-        
-        # # Prepare the checkpoint_sequential array
-        # checkpoint_seq = []
-
-        # def seq_wrapper(i):
-        #     def forward(prv_loss, prv_states, prv_steps):
-        #         loss, state, step = checkpointed_step(
-        #             idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-        #             targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-        #             seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-        #             prv_loss, prv_states, prv_steps
-        #         )
-        #         return loss, state, step
-        #     return forward
-        
-        # segment_range = math.ceil(T / self.ctx_len)
-        # for i in range(segment_range):
-        #     checkpoint_seq.append(seq_wrapper(i))
-        
-        # # 
-        # total_loss, states, steps = torch.utils.checkpoint.checkpoint_sequential(
-        #     checkpoint_seq,
-        #     segment_range - 1,
-        #     ( total_loss,
-        #     states,
-        #     steps ),
-        # )
+            states = BlockStateList(new_shift_states, new_wkv_states)
+            gc.collect()
+            # torch.cuda.empty_cache()
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
-            # Get the current learning rate
-            lr = self.trainer.optimizers[0].param_groups[0]['lr']
             wandb.log({
-                'substep': batch_idx, 
-                'real_ctx_len': T, 
+                'substep': batch_idx,
+                'real_ctx_len': T,
                 'train/loss': total_loss,
-                'trainer/global_step':self.global_step,
-                'trainer/learning_rate': lr
+                'trainer/global_step': self.global_step
             })
-
-        print("## Returing total_loss: ", total_loss)
 
         return total_loss
 
@@ -722,7 +527,6 @@ class RWKV(L.LightningModule):
         return total_loss
 
     def validation_step(self, batch, batch_idx):
-        # raise NotImplementedError("Validation step is not implemented")
         total_loss = self.compute_loss(batch, batch_idx, False)
         self.log('validation/loss', total_loss, prog_bar=True, sync_dist=True)
         return total_loss
