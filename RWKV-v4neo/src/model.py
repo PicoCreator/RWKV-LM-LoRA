@@ -266,6 +266,11 @@ class RWKV(L.LightningModule):
                  torch_set_float32_matmul_precision:str = None
                  ):
         super().__init__()
+
+        # We perform manual optimization step, as per
+        # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        self.automatic_optimization = False
+
         self.ctx_len = ctx_len
         self.ctx_len_cutoffs = ctx_len_cutoffs
         self.ctx_len_warmup_steps = ctx_len_warmup_steps
@@ -479,47 +484,86 @@ class RWKV(L.LightningModule):
 
             return new_loss, new_shift_states, new_wkv_states, new_steps
 
-        total_loss = torch.tensor(
-            0, dtype=self.emb.weight.dtype).requires_grad_()
+        # Fix logging new line
+        print(" ")
+
         steps = 0
         states = BlockStateList.create(self.n_layer, B, C, seq.device,
                                        self.emb.weight.dtype)
-        for i in range(math.ceil(T / self.ctx_len)):
-            if i != math.ceil(T / self.ctx_len) - 1:
-                total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
+        
+        total_loss_arr = []
+        segments = math.ceil(T / self.ctx_len)
+        for i in range(segments):
+            if i < (segments - 1):
+                print("# i(d) = ", i)
+                loss_part, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
-                    states.shift_states,
-                    states.wkv_states,
+                    torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(),
+                    states.shift_states.clone().detach(),
+                    states.wkv_states.clone().detach(),
                     steps,
                 )
+                total_loss_arr.append(loss_part)
             else:
-                total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
+                print("# i(c) = ", i)
+                loss_part, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
-                    states.shift_states,
-                    states.wkv_states,
+                    torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(),
+                    states.shift_states.clone().detach(),
+                    states.wkv_states.clone().detach(),
                     steps,
                 )
+                total_loss_arr.append(loss_part)
             states = BlockStateList(new_shift_states, new_wkv_states)
             gc.collect()
             # torch.cuda.empty_cache()
+
+        # Debugging the total_loss_arr
+        print( "total_loss_arr = ", total_loss_arr);
+
+        # Lets compute the total_loss, while doing backward pass for each segment
+        total_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(False)
+
+        # Get the optimizer, for manual backward pass optimization
+        # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        optimizer = self.optimizers()
+
+        # Reset all back prop gradients
+        optimizer.zero_grad()
+
+        # Lets loop through all the segments
+        for i in range(segments - 1, 0, -1):
+            print("# b(p) = ", i)
+            self.manual_backward(total_loss_arr[i])
+            total_loss = total_loss + total_loss_arr[i].clone().detach().requires_grad_(False)
+
+        # Perform the optimization step
+        optimizer.step()
+
+        # Final loss, to return
+        final_loss = total_loss
+
+        # final_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True)
+        # for i in range(segments - 1, 0, -1):
+        #     print("# b(p) = ", i)
+        #     final_loss = final_loss + total_loss_arr[i]
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
             wandb.log({
                 'substep': batch_idx,
                 'real_ctx_len': T,
-                'train/loss': total_loss,
+                'train/loss': final_loss,
                 'trainer/global_step': self.global_step
             })
 
-        return total_loss
+        # Return the final loss
+        return final_loss
 
     def training_step(self, batch, batch_idx):
         total_loss = self.compute_loss(batch, batch_idx, True)
