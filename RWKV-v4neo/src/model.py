@@ -555,6 +555,10 @@ class RWKV(L.LightningModule):
         C = self.n_embd
         total_mask_sum = torch.sum(seq_mask)
 
+        # If total_mask_sum, we skip, as there is no tokens of value to learn from anyway
+        if total_mask_sum == 0:
+            return 0
+
         def checkpointed_step(idx, targets, mask, prev_loss, last_shift_states,
                               last_wkv_states, prev_steps):
             logits, new_shift_states, new_wkv_states = self(
@@ -565,21 +569,10 @@ class RWKV(L.LightningModule):
             submask = mask.view(-1)[:loss.shape[0]]
             submask_sum = torch.sum(submask)
 
-            # Special handling of empty mask
-            # (possible when real_ctx_len is larger then ctx_len, which results into 'chunking')
-            if submask_sum == 0:
-                loss = torch.sum(loss * submask) / 1
-                loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
-                new_steps = prev_steps  # + submask_sum
-                new_loss = prev_loss + loss
-            else:
-                # Handling with mask
-                loss = torch.sum(loss * submask) / submask_sum
-                loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
-                new_steps = prev_steps + submask_sum
-                new_loss = prev_loss * (prev_steps / new_steps) + loss * (
-                    1 - prev_steps / new_steps)
-
+            loss = torch.sum(loss * mask) / total_mask_sum  
+            loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
+            new_steps = prev_steps + submask_sum
+            new_loss = prev_loss + loss
             return new_loss, new_shift_states, new_wkv_states, new_steps
 
         total_loss = torch.tensor(
@@ -587,8 +580,17 @@ class RWKV(L.LightningModule):
         steps = 0
         states = BlockStateList.create(self.n_layer, B, C, seq.device,
                                        self.emb.weight.dtype)
-        for i in range(math.ceil(T / self.ctx_len)):
-            if i != math.ceil(T / self.ctx_len) - 1:
+        segment_count = math.ceil(T / self.ctx_len)
+
+        # Get the optimizer, for manual backward pass optimization
+        # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        optimizer = self.optimizers()
+
+        # Reset all back prop gradients
+        optimizer.zero_grad()
+
+        for i in range(segment_count):
+            if i < segment_count-1:
                 total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
