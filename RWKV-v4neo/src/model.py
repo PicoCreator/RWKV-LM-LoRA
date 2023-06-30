@@ -621,8 +621,6 @@ class RWKV(L.LightningModule):
                     prv_wkv_state,
                     steps,
                 )
-                if self.segmented_learning:
-                    loss_array.append(total_loss)
             else:
                 total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
@@ -633,8 +631,10 @@ class RWKV(L.LightningModule):
                     prv_wkv_state,
                     steps,
                 )
-                if self.segmented_learning:
-                    loss_array.append(total_loss)
+
+            if self.segmented_learning:
+                loss_array.append(total_loss)
+                
             states = BlockStateList(new_shift_states, new_wkv_states)
             gc.collect()
             # torch.cuda.empty_cache()
