@@ -2,7 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import os, math, sys
+import gc, math
 from random import randint
 from typing import List, Optional
 
@@ -469,8 +469,13 @@ class RWKV(L.LightningModule):
         if max_epochs > 0:
             return estimated_stepping_batches // max_epochs
 
+        # Get the train_dataloader
+        train_dataloader = self.trainer.train_dataloader
+        if( train_dataloader is None ):
+            train_dataloader = self.trainer.fit_loop._data_source.dataloader()
+
         # Max epoch is not set, use the train_dataloader
-        dataset_size = len(self.trainer.train_dataloader)
+        dataset_size = len(train_dataloader)
         num_devices = max(1, self.trainer.num_devices)
         num_steps = dataset_size // (self.trainer.accumulate_grad_batches * num_devices)
         return num_steps
