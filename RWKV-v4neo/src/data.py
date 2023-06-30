@@ -19,7 +19,8 @@ def get_data_module(
         # Custom tokenizer settings
         tokenizer: str = "neox",
         # Text rechunking size
-        text_rechunk_size: int = 2048,
+        text_rechunk_size: int = 4096,
+        text_rechunk_force: bool = False,
         # ---
         # HF dataset conversion helpers
         # ---
@@ -209,59 +210,61 @@ def get_data_module(
         dataset_features_to_remove = {k: v for k, v in dataset_features.items() if k not in ["input_ids", "token_type_ids", "attention_mask"]}
         src_dataset = src_dataset.remove_columns(list(dataset_features_to_remove.keys()))
         
-        # See if rechunking is needed, this is useful only for raw "text" based datasets
-        # where we would need to split them into "digestable" context length sizes
-        # (this function will break otherwise, due to change in the sample sizes)
+        # Get the newline token
+        newline_tokenSet = tokenizer(["\n"])
+
+        # See if rechunking is needed, this is useful mostly for "text" based datasets
+        # where we would need to split them into "digestable" context length sizes 
+        # used for foundation training
+        # ---
+
+        # The rechunking function
+        def rechunk_text(x):
+            # Full Raw values that we will need to "rechunk"
+            full_input_ids = []
+            full_token_type_ids = []
+            full_attention_mask = []
+
+            # Loop through the x input, and build the raw values
+            for i in range(len(x["input_ids"])):
+                # Get the respective values and push them to the 
+                # raw value array, effectively merging the arrays together
+                # with the newline token in between
+                full_input_ids += x["input_ids"][i] + newline_tokenSet["input_ids"][0]
+                full_token_type_ids += x["token_type_ids"][i] + newline_tokenSet["token_type_ids"][0]
+                full_attention_mask += x["attention_mask"][i] + newline_tokenSet["attention_mask"][0]
+            
+            # Total length, and sample count
+            # note that thte "remainder" will be discarded
+            total_len = len(full_input_ids)
+            total_samples = total_len // text_rechunk_size
+
+            # The output arrays
+            out_input_ids = []
+            out_token_type_ids = []
+            out_attention_mask = []
+
+            # Generate the output arrays
+            for i in range(total_samples):
+                # Calculate the start and end of the sample
+                start = i * text_rechunk_size
+                end = start + text_rechunk_size
+
+                # Push the sample to the output arrays
+                out_input_ids.append(full_input_ids[start:end])
+                out_token_type_ids.append(full_token_type_ids[start:end])
+                out_attention_mask.append(full_attention_mask[start:end])
+            
+            # Prepare and return the output object
+            ret = {
+                'input_ids': out_input_ids,
+                'token_type_ids': out_token_type_ids,
+                'attention_mask': out_attention_mask,
+            }
+            return ret
+
+        # Perform rechunking if needed for "text" based datasets
         if source == "text" and text_rechunk_size > 0:
-            # Get the newline token
-            newline_tokenSet = tokenizer(["\n"])
-
-            # The rechunking function
-            def rechunk_text(x):
-                # Full Raw values that we will need to "rechunk"
-                full_input_ids = []
-                full_token_type_ids = []
-                full_attention_mask = []
-
-                # Loop through the x input, and build the raw values
-                for i in range(len(x["input_ids"])):
-                    # Get the respective values and push them to the 
-                    # raw value array, effectively merging the arrays together
-                    # with the newline token in between
-                    full_input_ids += x["input_ids"][i] + newline_tokenSet["input_ids"][0]
-                    full_token_type_ids += x["token_type_ids"][i] + newline_tokenSet["token_type_ids"][0]
-                    full_attention_mask += x["attention_mask"][i] + newline_tokenSet["attention_mask"][0]
-                
-                # Total length, and sample count
-                # note that thte "remainder" will be discarded
-                total_len = len(full_input_ids)
-                total_samples = total_len // text_rechunk_size
-
-                # The output arrays
-                out_input_ids = []
-                out_token_type_ids = []
-                out_attention_mask = []
-
-                # Generate the output arrays
-                for i in range(total_samples):
-                    # Calculate the start and end of the sample
-                    start = i * text_rechunk_size
-                    end = start + text_rechunk_size
-
-                    # Push the sample to the output arrays
-                    out_input_ids.append(full_input_ids[start:end])
-                    out_token_type_ids.append(full_token_type_ids[start:end])
-                    out_attention_mask.append(full_attention_mask[start:end])
-                
-                # Prepare and return the output object
-                ret = {
-                    'input_ids': out_input_ids,
-                    'token_type_ids': out_token_type_ids,
-                    'attention_mask': out_attention_mask,
-                }
-                return ret
-
-            # Perform the rechunking
             src_dataset = src_dataset.map(rechunk_text, batched=True, 
                                           batch_size=text_rechunk_size*10,
                                           num_proc=num_cpus)
@@ -277,8 +280,14 @@ def get_data_module(
             if max_token_size > 0 and row_length > max_token_size:
                 return False
             return True
-
         src_dataset = src_dataset.filter(dataset_filter)
+
+        # Perform rechunking after filtering, if source is not a "text" based 
+        # dataset and text_rechunk_force is enabled
+        if source != "text" and text_rechunk_size > 0 and text_rechunk_force:
+            src_dataset = src_dataset.map(rechunk_text, batched=True, 
+                                          batch_size=text_rechunk_size*2,
+                                          num_proc=num_cpus)
 
         # Check if the dataset does not have a test split
         # and if so, perform the split
