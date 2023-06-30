@@ -487,6 +487,14 @@ class RWKV(L.LightningModule):
             cfg = strategy.config["zero_optimization"]
             return "offload_optimizer" in cfg or "offload_parameters" in cfg
         return False
+    
+    @property
+    def deepspeed_stage(self) -> int:
+        strategy = self.trainer.strategy
+        if isinstance(strategy, DeepSpeedStrategy):
+            cfg = strategy.config["zero_optimization"]
+            return "stage" in cfg
+        return 1
 
     def forward(self, idx: torch.Tensor, last_shift_states: torch.Tensor,
                 last_wkv_states: torch.Tensor):
