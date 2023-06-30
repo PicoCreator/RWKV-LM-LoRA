@@ -230,6 +230,14 @@ model:
   torch_set_float32_matmul_precision: 'high'
   # torch_set_float32_matmul_precision: null
 
+  # Segmented based learning, used to work around training of large context length
+  # beyond what can be supported by the current GPU vram architecture
+  #
+  # This is not 1:1 equivalent to the same training process with required vram
+  # as the training process is split into multiple segments, part by part.
+  # with limited learnings from the previous segment.
+  segmented_learning: true
+
   # various other settings you probably should leave alone
   grad_cp: true
   warmup_steps: -1

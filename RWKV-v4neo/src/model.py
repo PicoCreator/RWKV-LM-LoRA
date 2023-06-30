@@ -262,6 +262,7 @@ class RWKV(L.LightningModule):
                  beta2: float = 0.99,
                  adam_eps: float = 1.0e-08,
                  weight_decay: float = 0.01,
+                 segmented_learning: bool = True,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -285,6 +286,11 @@ class RWKV(L.LightningModule):
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
+        self.segmented_learning = segmented_learning
+
+        # We perform manual optimization step, as per
+        # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        self.automatic_optimization = False
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -569,7 +575,7 @@ class RWKV(L.LightningModule):
             submask = mask.view(-1)[:loss.shape[0]]
             submask_sum = torch.sum(submask)
 
-            loss = torch.sum(loss * mask) / total_mask_sum  
+            loss = torch.sum(loss * submask) / total_mask_sum  
             loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
             new_steps = prev_steps + submask_sum
             new_loss = prev_loss + loss
@@ -589,31 +595,60 @@ class RWKV(L.LightningModule):
         # Reset all back prop gradients
         optimizer.zero_grad()
 
+        # The loss array, to store the loss for each segment
+        # this is used for segmented learning process
+        loss_array = []
+
         for i in range(segment_count):
+            # Segmented learning, detaches the graph for each segment
+            if self.segmented_learning:
+                prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_() + total_loss.clone().detach().requires_grad_(False)
+                prv_shift_state = states.shift_states.clone().detach().requires_grad_(False)
+                prv_wkv_state = states.wkv_states.clone().detach().requires_grad_(False)
+            else:
+                prv_loss = total_loss
+                prv_shift_state = states.shift_states
+                prv_wkv_state = states.wkv_states
+
             if i < segment_count-1:
                 total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
-                    states.shift_states,
-                    states.wkv_states,
+                    prv_loss,
+                    prv_shift_state,
+                    prv_wkv_state,
                     steps,
                 )
+                if self.segmented_learning:
+                    loss_array.append(total_loss)
             else:
                 total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
                     seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
-                    states.shift_states,
-                    states.wkv_states,
+                    prv_loss,
+                    prv_shift_state,
+                    prv_wkv_state,
                     steps,
                 )
+                if self.segmented_learning:
+                    loss_array.append(total_loss)
             states = BlockStateList(new_shift_states, new_wkv_states)
             gc.collect()
             # torch.cuda.empty_cache()
+
+        if self.segmented_learning:
+            # Lets loop through all the segments, and perform the backward pass one by one
+            for i in range(segment_count - 1, -1, -1):
+                self.manual_backward(loss_array[i])
+        else:
+            # Perform the backward pass on the total loss, as per normal instead
+            self.manual_backward(total_loss)
+
+        # Perform the optimization step
+        optimizer.step()
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
