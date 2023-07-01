@@ -323,6 +323,10 @@ class RWKV(L.LightningModule):
         self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
+        if self.segmented_learning == False:
+            if self.deepspeed_stage >= 2 or self.deepspeed_offload:
+                print("[WARNING]: it is highly recommended to enable segmented_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
+
         if self.layerwise_lr:
             lr_1x = set()
             lr_2x = set()
@@ -410,7 +414,6 @@ class RWKV(L.LightningModule):
                 'optimizer': optimizer,
                 'lr_scheduler': lr_scheduler,
             }
-        
         else:
             # Skip the lr_scheduler process if lr_init and lr_final are the same
             if starting_lr == ending_lr:
@@ -590,12 +593,15 @@ class RWKV(L.LightningModule):
                                        self.emb.weight.dtype)
         segment_count = math.ceil(T / self.ctx_len)
 
-        # # Get the optimizer, for manual backward pass optimization
-        # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-        # optimizer = self.optimizers()
-
-        # # Reset all back prop gradients
-        # optimizer.zero_grad()
+        # We get the average segment size, this helps ensure that the segment
+        # cutoffs do not make the last segment too small, it also helps ensure
+        # the segment cutoff points are more varied, across mixed dataset sizes
+        # to avoid potentially undesired training behaviour at fixed cutoff points
+        # (this only applies for segmented learning)
+        # if self.segmented_learning:
+        #   segment_size = math.min(math.roundup(T / segment_count), self.ctx_len)
+        # else:
+        #   segment_size = self.ctx_len
 
         # The loss array, to store the loss for each segment
         # this is used for segmented learning process
