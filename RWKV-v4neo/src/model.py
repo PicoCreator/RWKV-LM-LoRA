@@ -599,7 +599,7 @@ class RWKV(L.LightningModule):
         # to avoid potentially undesired training behaviour at fixed cutoff points
         # (this only applies for segmented learning)
         if self.segmented_learning:
-          segment_size = math.min(math.roundup(T / segment_count), self.ctx_len)
+          segment_size = min(math.ceil(T / segment_count), self.ctx_len)
         else:
           segment_size = self.ctx_len
 
