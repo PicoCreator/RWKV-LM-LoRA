@@ -686,6 +686,7 @@ class RWKV(L.LightningModule):
             # Add up the loss that skipped the backward pass
             for i in range(last_learning_segment, -1, -1):
                 total_loss += loss_array[i].clone().detach()
+                #.to(last_loss.device)
 
             # Add the last segment loss to the total loss
             total_loss += last_loss
