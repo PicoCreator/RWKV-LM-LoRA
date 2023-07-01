@@ -288,9 +288,9 @@ class RWKV(L.LightningModule):
         self.adam_eps = adam_eps
         self.segmented_learning = segmented_learning
 
-        # We perform manual optimization step, as per
-        # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-        self.automatic_optimization = False
+        # # We perform manual optimization step, as per
+        # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        # self.automatic_optimization = False
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -588,12 +588,12 @@ class RWKV(L.LightningModule):
                                        self.emb.weight.dtype)
         segment_count = math.ceil(T / self.ctx_len)
 
-        # Get the optimizer, for manual backward pass optimization
-        # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-        optimizer = self.optimizers()
+        # # Get the optimizer, for manual backward pass optimization
+        # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        # optimizer = self.optimizers()
 
-        # Reset all back prop gradients
-        optimizer.zero_grad()
+        # # Reset all back prop gradients
+        # optimizer.zero_grad()
 
         # The loss array, to store the loss for each segment
         # this is used for segmented learning process
@@ -602,7 +602,7 @@ class RWKV(L.LightningModule):
         for i in range(segment_count):
             # Segmented learning, detaches the graph for each segment
             if self.segmented_learning:
-                prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_() + total_loss.clone().detach().requires_grad_(False)
+                prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True)
                 prv_shift_state = states.shift_states.clone().detach().requires_grad_(False)
                 prv_wkv_state = states.wkv_states.clone().detach().requires_grad_(False)
             else:
@@ -634,21 +634,43 @@ class RWKV(L.LightningModule):
 
             if self.segmented_learning:
                 loss_array.append(total_loss)
-                
+
             states = BlockStateList(new_shift_states, new_wkv_states)
             gc.collect()
             # torch.cuda.empty_cache()
 
         if self.segmented_learning:
+            # Get the last loss object
+            last_loss = loss_array[-1]
+
+            # Prepare the total loss, on the same device as the last loss
+            total_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True).to(last_loss.device)
+
+            # self.manual_backward(total_loss)
+
+            # We do a workaround, to prevent an error from manual_backwards operation
+            # of temporary disabling the automatic optimization, and renabling it
+            # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+            self.automatic_optimization = False
+            
             # Lets loop through all the segments, and perform the backward pass one by one
             for i in range(segment_count - 1, -1, -1):
                 self.manual_backward(loss_array[i])
-        else:
-            # Perform the backward pass on the total loss, as per normal instead
-            self.manual_backward(total_loss)
+                total_loss += loss_array[i].clone().detach()
+                #.to(last_loss.device)
 
-        # Perform the optimization step
-        optimizer.step()
+            # Add the last segment loss to the total loss
+            # total_loss += last_loss
+
+            # Re-enable the automatic optimization
+            # and handle the last loss backward pass as normal
+            self.automatic_optimization = True
+        # else:
+        #     # Perform the backward pass on the total loss, as per normal instead
+        #     self.manual_backward(total_loss)
+
+        # # Perform the optimization step
+        # optimizer.step()
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
