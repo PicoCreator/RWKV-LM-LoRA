@@ -598,10 +598,10 @@ class RWKV(L.LightningModule):
         # the segment cutoff points are more varied, across mixed dataset sizes
         # to avoid potentially undesired training behaviour at fixed cutoff points
         # (this only applies for segmented learning)
-        # if self.segmented_learning:
-        #   segment_size = math.min(math.roundup(T / segment_count), self.ctx_len)
-        # else:
-        #   segment_size = self.ctx_len
+        if self.segmented_learning:
+          segment_size = math.min(math.roundup(T / segment_count), self.ctx_len)
+        else:
+          segment_size = self.ctx_len
 
         # The loss array, to store the loss for each segment
         # this is used for segmented learning process
@@ -621,9 +621,9 @@ class RWKV(L.LightningModule):
             if i < segment_count-1:
                 total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
-                    idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                    idx[:, i * segment_size:(i + 1) * segment_size],
+                    targets[:, i * segment_size:(i + 1) * segment_size],
+                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
                     prv_loss,
                     prv_shift_state,
                     prv_wkv_state,
@@ -631,9 +631,9 @@ class RWKV(L.LightningModule):
                 )
             else:
                 total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
-                    idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
+                    idx[:, i * segment_size:(i + 1) * segment_size],
+                    targets[:, i * segment_size:(i + 1) * segment_size],
+                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
                     prv_loss,
                     prv_shift_state,
                     prv_wkv_state,
