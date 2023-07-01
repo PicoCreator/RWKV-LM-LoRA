@@ -32,40 +32,40 @@ trainer:
 
   # Logger setting for wandb, if you want to enable wandb, uncomment the whole logger section
   # ---
-  # logger:
-  #   class_path: lightning.pytorch.loggers.WandbLogger
-  #   init_args:
-  #     name: 'infctx-validation-dryrun (short 2 * 2 data sample dry run)'
-  #     project: 'RWKV-Memory-Experiment'
-  #     tags: ['RWKV', 'memory-exp']
-  #     id: null
-  #     save_dir: .
-  #     version: null
-  #     offline: false
-  #     dir: null
-  #     anonymous: null
-  #     log_model: false
-  #     experiment: null
-  #     prefix: ''
-  #     checkpoint_name: null
-  #     job_type: null
-  #     config: null
-  #     entity: null
-  #     reinit: null
-  #     group: null
-  #     notes: null
-  #     magic: null
-  #     config_exclude_keys: null
-  #     config_include_keys: null
-  #     mode: null
-  #     allow_val_change: null
-  #     resume: null
-  #     force: null
-  #     tensorboard: null
-  #     sync_tensorboard: null
-  #     monitor_gym: null
-  #     save_code: null
-  #     settings: null
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      name: 'infctx-validation-segmented (train-ctx=128, data-ctx=1024, bs=12)'
+      project: 'RWKV-infctx-validation'
+      tags: ['RWKV', 'infctx']
+      id: null
+      save_dir: .
+      version: null
+      offline: false
+      dir: null
+      anonymous: null
+      log_model: false
+      experiment: null
+      prefix: ''
+      checkpoint_name: null
+      job_type: null
+      config: null
+      entity: null
+      reinit: null
+      group: null
+      notes: null
+      magic: null
+      config_exclude_keys: null
+      config_include_keys: null
+      mode: null
+      allow_val_change: null
+      resume: null
+      force: null
+      tensorboard: null
+      sync_tensorboard: null
+      monitor_gym: null
+      save_code: null
+      settings: null
   
   # Checkpoint settings for the training process
   callbacks:
@@ -79,7 +79,7 @@ trainer:
       # which will create a `rwkv_model.pth` in the checkpoint directory.
       #
       # Do not use the `zero_to_fp32.py` script as that will have export format issues
-      dirpath: ../checkpoint/trainer-validaiton/infctx-validation-dryrun
+      dirpath: ../checkpoint/trainer-validaiton/infctx-validation-segmented
       filename: null
       
       # Save the top/last K checkpoints
@@ -102,7 +102,7 @@ trainer:
       # In general you will want to avoid putting a low number (expecially if accumulate_grad_batches <= 100)
       # as the checkpoint process, will pause all the gpu training for some time, slowing down the overall process
       # However you do not want to configure too high of a number, where you will lose too much progress if the training crashes
-      every_n_train_steps: 2500
+      every_n_train_steps: 5000
       every_n_epochs: null
       save_on_train_epoch_end: true
       train_time_interval: null
@@ -120,7 +120,7 @@ trainer:
   # Or set it as a number, and it will stop after that number of epochs
   max_epochs: -1
   min_epochs: null
-  max_steps: 2
+  max_steps: 2500
   min_steps: null
   max_time: null
 
@@ -136,7 +136,7 @@ trainer:
   #
   # You are also recommended to configure this to a large enough number to fully utilize
   # your GPU processing time %, and avoid idle time for the GPU between batches
-  accumulate_grad_batches: 2
+  accumulate_grad_batches: 12
 
   # Various other settings, you probably want to leave alone
   fast_dev_run: false
@@ -189,7 +189,7 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 128
+  ctx_len: 1024
   
   # Data samples would be cut down to the respective max ctx_len_cutoffs
   # values if its larger then ctx_len. If the data sample is larger then
@@ -240,7 +240,7 @@ model:
   # Segmented range to performing backprop learning on
   # 1 means to apply only for the last segment
   # -1 means to apply for all segments
-  segmented_learning_range: 2
+  segmented_learning_range: -1
 
   # various other settings you probably should leave alone
   grad_cp: true

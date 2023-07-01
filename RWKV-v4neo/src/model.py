@@ -263,6 +263,7 @@ class RWKV(L.LightningModule):
                  adam_eps: float = 1.0e-08,
                  weight_decay: float = 0.01,
                  segmented_learning: bool = True,
+                 segmented_learning_range: int = -1,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -287,6 +288,7 @@ class RWKV(L.LightningModule):
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
         self.segmented_learning = segmented_learning
+        self.segmented_learning_range = segmented_learning_range
 
         # # We perform manual optimization step, as per
         # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
@@ -640,37 +642,57 @@ class RWKV(L.LightningModule):
             # torch.cuda.empty_cache()
 
         if self.segmented_learning:
+            # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
+            # we would need to implement manual optimization as per
+            # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+            #
+            # Otherwise an error will be thrown if we call `self.manual_backward`
+            #
+            # However this would mean that we would need to do a full reimplementation
+            # of several features that were handled by the automatic optimization.
+            # - accumulate_grad_batches
+            # - gradient_clip_val
+            # - (And probably other features that I am not aware of)
+            #
+            # So this is a hacky work around, we only disable automatic_optimization temporarily
+            # and perform the backward pass manually, and then re-enable the automatic optimization
+            #
+            # From the current code implementatiion, it seem like this is blocked only by 
+            # automatic_optimization flag - and has no adverse side effect otherwise
+            # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
+            #
+            # If anyone have a better idea, let me know
+            # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
+            self.automatic_optimization = False
+            
             # Get the last loss object
             last_loss = loss_array[-1]
 
             # Prepare the total loss, on the same device as the last loss
             total_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True).to(last_loss.device)
 
-            # self.manual_backward(total_loss)
+            # Segmented learning range
+            if self.segmented_learning_range > 0:
+                last_learning_segment = segment_count - self.segmented_learning_range -1;
+            else:
+                last_learning_segment = -1;
 
-            # We do a workaround, to prevent an error from manual_backwards operation
-            # of temporary disabling the automatic optimization, and renabling it
-            # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-            self.automatic_optimization = False
-            
             # Lets loop through all the segments, and perform the backward pass one by one
-            for i in range(segment_count - 1, -1, -1):
+            # except the last segment, which we will let the default backward pass handle
+            for i in range(segment_count - 2, last_learning_segment, -1):
                 self.manual_backward(loss_array[i])
                 total_loss += loss_array[i].clone().detach()
                 #.to(last_loss.device)
+            # Add up the loss that skipped the backward pass
+            for i in range(last_learning_segment, -1, -1):
+                total_loss += loss_array[i].clone().detach()
 
             # Add the last segment loss to the total loss
-            # total_loss += last_loss
+            total_loss += last_loss
 
             # Re-enable the automatic optimization
             # and handle the last loss backward pass as normal
             self.automatic_optimization = True
-        # else:
-        #     # Perform the backward pass on the total loss, as per normal instead
-        #     self.manual_backward(total_loss)
-
-        # # Perform the optimization step
-        # optimizer.step()
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
