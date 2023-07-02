@@ -606,7 +606,8 @@ class RWKV(L.LightningModule):
           segment_size = self.ctx_len
 
         # The loss array, to store the loss for each segment
-        # this is used for segmented learning process
+        # this is used for tbptt learning process
+        # Array contains the first to last segment loss
         loss_array = []
 
         for i in range(segment_count):
@@ -685,14 +686,15 @@ class RWKV(L.LightningModule):
             else:
                 last_learning_segment = -1;
 
-            # Lets loop through all the segments, and perform the backward pass one by one
-            # except the last segment, which we will let the default backward pass handle
-            for i in range(segment_count - 2, last_learning_segment, -1):
-                self.manual_backward(loss_array[i])
+            # Add up the loss that will skip the backward pass
+            for i in range(0, last_learning_segment, 1):
                 total_loss += loss_array[i].clone().detach()
                 #.to(last_loss.device)
-            # Add up the loss that skipped the backward pass
-            for i in range(last_learning_segment, -1, -1):
+
+            # Lets loop through all the segments, and perform the backward pass one by one
+            # except the last segment, which we will let the default backward pass handle
+            for i in range(last_learning_segment, segment_count - 2, 1):
+                self.manual_backward(loss_array[i])
                 total_loss += loss_array[i].clone().detach()
                 #.to(last_loss.device)
 
