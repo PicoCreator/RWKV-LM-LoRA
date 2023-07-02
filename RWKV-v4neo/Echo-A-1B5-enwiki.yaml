@@ -1,5 +1,5 @@
 # lightning.pytorch==2.0.2
-seed_everything: true
+seed_everything: 3941088705
 trainer:
   # Configure the number of GPU, avaliable on your machine
   accelerator: gpu
@@ -24,7 +24,7 @@ trainer:
   # For more details see:
   # https://lightning.ai/docs/pytorch/stable/advanced/model_parallel.html#deepspeed-zero-stage-2
   #
-  strategy: deepspeed_stage_2_offload
+  strategy: deepspeed_stage_2
 
   # Floating point precision for the model, because RWKV is built FOR bf16
   # you should pretty much never change this setting
@@ -35,12 +35,13 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 enwiki_100k foundation (fixed seed)'
+      name: 'Echo-A-1B5 enwiki_100k foundation'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwiki11'
+      # id: 'aenwiki11'
+      id: null
       save_dir: .
       version: null
       offline: false
@@ -104,7 +105,7 @@ trainer:
       # In general you will want to avoid putting a low number (expecially if accumulate_grad_batches <= 100)
       # as the checkpoint process, will pause all the gpu training for some time, slowing down the overall process
       # However you do not want to configure too high of a number, where you will lose too much progress if the training crashes
-      every_n_train_steps: 500
+      every_n_train_steps: 250
       every_n_epochs: null
       save_on_train_epoch_end: true
       train_time_interval: null
@@ -120,7 +121,7 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 3
+  max_epochs: 1
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -203,18 +204,18 @@ model:
   # Learning rate of the training process
   # ---
   # Initia learning rate of the process
-  lr_init: 3e-4
+  lr_init: 6e-4
   # Final learning rate after the learning rate period
   # learning rate will stay at final value from then onwards
   #
   # NOTE: lr_final / lr_period does not work with warmup_steps
   #       and will be ignored (or replaced) with the warmup_steps logic instead
-  lr_final: 1e-5
+  lr_final: 4e-4
   # Number of epoch to reduce the learning rate from lr_init to lr_final
   #  1 means a single epoch (so lr would be lr_final from epoch 2 onwards)
   #  0 means lr_final will apply immediately
   # -1 means we take the current max_step / max_epoch as the period
-  lr_period: -1
+  lr_period: 1
   # lr_period type if its set, defaults to epoch
   lr_period_type: epoch
 

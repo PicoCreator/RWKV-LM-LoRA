@@ -1,5 +1,5 @@
 # lightning.pytorch==2.0.2
-seed_everything: true
+seed_everything: 3941088705
 trainer:
   # Configure the number of GPU, avaliable on your machine
   accelerator: gpu
@@ -40,7 +40,8 @@ trainer:
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
       # id: 'aenwiki01'
-      id: 'aenwikm3A'
+      # id: 'aenwikm3A'
+      id: null
       save_dir: .
       version: null
       offline: false
