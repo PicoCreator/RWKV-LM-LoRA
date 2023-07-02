@@ -15,15 +15,15 @@ sudo apt-get install ninja-build
 conda update conda
 
 # Virtual env, with python 3.11
-conda create -n rwkv-exp python=3.11 pip
-conda activate rwkv-exp
+conda create -n rwkv-infctx python=3.11 pip
+conda activate rwkv-infctx
 
 # Install pytorch
 conda install -y pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
 
 # We use python -m pip, instead of pip directly, as it resolve issues with venv not loading the right pip
 python -m pip install datasets transformers 
-python -m pip install lightning==2.0.2 deepspeed==0.9.3 
+python -m pip install lightning==2.0.4 deepspeed==0.9.5
 python -m pip install ninja numexpr jsonargparse 'jsonargparse[signatures]'
 python -m pip install lm-dataformat ftfy sentencepiece tokenizers wandb
 ```

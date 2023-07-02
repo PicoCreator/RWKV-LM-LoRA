@@ -93,7 +93,7 @@ trainer:
       
       # If enabled (true), save a copy of the latest checkpoint to 'last.ckpt'
       # useful to simply checkpoint resume scripts, at a price of disk performance
-      save_last: false
+      save_last: true
 
       # DO NOT set this as true, as the model weight exported will have format issues
       # expert as checkpoint, and use the `export_checkpoint.py` script to convert to model instead
