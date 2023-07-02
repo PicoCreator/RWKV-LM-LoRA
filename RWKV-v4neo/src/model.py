@@ -684,16 +684,17 @@ class RWKV(L.LightningModule):
             if self.tbptt_learning_range > 0:
                 last_learning_segment = segment_count - self.tbptt_learning_range -1;
             else:
-                last_learning_segment = -1;
+                last_learning_segment = 0;
 
             # Add up the loss that will skip the backward pass
-            for i in range(0, last_learning_segment, 1):
-                total_loss += loss_array[i].clone().detach()
-                #.to(last_loss.device)
+            if last_learning_segment > 0:
+                for i in range(0, last_learning_segment, 1):
+                    total_loss += loss_array[i].clone().detach()
+                    #.to(last_loss.device)
 
             # Lets loop through all the segments, and perform the backward pass one by one
             # except the last segment, which we will let the default backward pass handle
-            for i in range(last_learning_segment, segment_count - 2, 1):
+            for i in range(last_learning_segment, segment_count - 1, 1):
                 self.manual_backward(loss_array[i])
                 total_loss += loss_array[i].clone().detach()
                 #.to(last_loss.device)
