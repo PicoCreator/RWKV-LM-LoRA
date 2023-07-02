@@ -3,7 +3,7 @@ seed_everything: 3941088705
 trainer:
   # Configure the number of GPU, avaliable on your machine
   accelerator: gpu
-  devices: 8
+  devices: 1
   num_nodes: 1
 
   #
@@ -192,7 +192,7 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 8192
+  ctx_len: 4096
   # Data samples would be cut down to the respective max ctx_len_cutoffs
   # values if its larger then ctx_len. If the data sample is larger then
   # the largest len_cutoff, the remaining data will be discarded
@@ -280,7 +280,7 @@ data:
   # (eg. removal of small articles of less then 512 tokens from wikipedia)
   #
   # This is ignored, if set to -1
-  min_token_size: 512
+  min_token_size: 1024
   max_token_size: -1
 
   # Rechunking of text dataset, this is done only when source is set as 'text'
