@@ -262,8 +262,8 @@ class RWKV(L.LightningModule):
                  beta2: float = 0.99,
                  adam_eps: float = 1.0e-08,
                  weight_decay: float = 0.01,
-                 segmented_learning: bool = True,
-                 segmented_learning_range: int = -1,
+                 tbptt_learning: bool = True,
+                 tbptt_learning_range: int = -1,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -287,8 +287,8 @@ class RWKV(L.LightningModule):
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
-        self.segmented_learning = segmented_learning
-        self.segmented_learning_range = segmented_learning_range
+        self.tbptt_learning = tbptt_learning
+        self.tbptt_learning_range = tbptt_learning_range
 
         # # We perform manual optimization step, as per
         # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
@@ -323,9 +323,9 @@ class RWKV(L.LightningModule):
         self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
-        if self.segmented_learning == False:
+        if self.tbptt_learning == False:
             if self.deepspeed_stage >= 2 or self.deepspeed_offload:
-                print("[WARNING]: it is highly recommended to enable segmented_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
+                print("[WARNING]: it is highly recommended to enable tbptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
 
         if self.layerwise_lr:
             lr_1x = set()
@@ -561,7 +561,7 @@ class RWKV(L.LightningModule):
                     break
                 prev_step = step
                 
-        do_segmented_learning = self.segmented_learning and is_training_run
+        do_tbptt_learning = self.tbptt_learning and is_training_run
         idx, targets = seq[:, :-1], seq[:, 1:]
 
         B, T = idx.shape
@@ -600,7 +600,7 @@ class RWKV(L.LightningModule):
         # the segment cutoff points are more varied, across mixed dataset sizes
         # to avoid potentially undesired training behaviour at fixed cutoff points
         # (this only applies for segmented learning)
-        if do_segmented_learning:
+        if do_tbptt_learning:
           segment_size = min(math.ceil(T / segment_count), self.ctx_len)
         else:
           segment_size = self.ctx_len
@@ -611,7 +611,7 @@ class RWKV(L.LightningModule):
 
         for i in range(segment_count):
             # Segmented learning, detaches the graph for each segment
-            if do_segmented_learning:
+            if do_tbptt_learning:
                 prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True)
                 prv_shift_state = states.shift_states.clone().detach().requires_grad_(False)
                 prv_wkv_state = states.wkv_states.clone().detach().requires_grad_(False)
@@ -642,14 +642,14 @@ class RWKV(L.LightningModule):
                     steps,
                 )
 
-            if do_segmented_learning:
+            if do_tbptt_learning:
                 loss_array.append(total_loss)
 
             states = BlockStateList(new_shift_states, new_wkv_states)
             gc.collect()
             # torch.cuda.empty_cache()
 
-        if do_segmented_learning:
+        if do_tbptt_learning:
             # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
             # we would need to implement manual optimization as per
             # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
@@ -680,8 +680,8 @@ class RWKV(L.LightningModule):
             total_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True).to(last_loss.device)
 
             # Segmented learning range
-            if self.segmented_learning_range > 0:
-                last_learning_segment = segment_count - self.segmented_learning_range -1;
+            if self.tbptt_learning_range > 0:
+                last_learning_segment = segment_count - self.tbptt_learning_range -1;
             else:
                 last_learning_segment = -1;
 
