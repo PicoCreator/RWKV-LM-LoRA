@@ -532,7 +532,7 @@ class RWKV(L.LightningModule):
 
         return x, new_states.shift_states, new_states.wkv_states
 
-    def compute_loss(self, batch, batch_idx, do_cutoff: bool):
+    def compute_loss(self, batch, batch_idx, is_training_run: bool):
         seq = batch['input_ids']
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
         seq_mask = batch['attention_mask']
@@ -541,7 +541,8 @@ class RWKV(L.LightningModule):
         if seq_mask is None or seq_mask.ndim != 2:
             seq_mask = torch.ones_like(seq[:, 1:])
 
-        if do_cutoff:
+        # Perform cutoff for training run
+        if is_training_run:
             prev_step = 0
             for step, len_cut in zip(self.ctx_len_warmup_steps,
                                      self.ctx_len_cutoffs):
@@ -559,7 +560,8 @@ class RWKV(L.LightningModule):
                     seq_mask[:, :pos] = 0
                     break
                 prev_step = step
-
+                
+        do_segmented_learning = self.segmented_learning and is_training_run
         idx, targets = seq[:, :-1], seq[:, 1:]
 
         B, T = idx.shape
@@ -598,7 +600,7 @@ class RWKV(L.LightningModule):
         # the segment cutoff points are more varied, across mixed dataset sizes
         # to avoid potentially undesired training behaviour at fixed cutoff points
         # (this only applies for segmented learning)
-        if self.segmented_learning:
+        if do_segmented_learning:
           segment_size = min(math.ceil(T / segment_count), self.ctx_len)
         else:
           segment_size = self.ctx_len
@@ -609,7 +611,7 @@ class RWKV(L.LightningModule):
 
         for i in range(segment_count):
             # Segmented learning, detaches the graph for each segment
-            if self.segmented_learning:
+            if do_segmented_learning:
                 prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True)
                 prv_shift_state = states.shift_states.clone().detach().requires_grad_(False)
                 prv_wkv_state = states.wkv_states.clone().detach().requires_grad_(False)
@@ -640,14 +642,14 @@ class RWKV(L.LightningModule):
                     steps,
                 )
 
-            if self.segmented_learning:
+            if do_segmented_learning:
                 loss_array.append(total_loss)
 
             states = BlockStateList(new_shift_states, new_wkv_states)
             gc.collect()
             # torch.cuda.empty_cache()
 
-        if self.segmented_learning:
+        if do_segmented_learning:
             # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
             # we would need to implement manual optimization as per
             # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
