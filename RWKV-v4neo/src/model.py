@@ -2,15 +2,17 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
-import os, math, sys
+import gc, math
 from random import randint
 from typing import List, Optional
+
 import numpy as np
 import torch
 # torch._C._jit_set_profiling_executor(True)
 # torch._C._jit_set_profiling_mode(True)
 import torch.nn as nn
 from torch.nn import functional as F
+
 import lightning as L
 from lightning.pytorch.utilities import rank_zero_info, rank_zero_only
 from lightning.pytorch.strategies import DeepSpeedStrategy
@@ -32,32 +34,56 @@ else:
 
 class TimeMixState:
 
-    def __init__(self, token_shift_state: torch.Tensor,
-                 wkv_state: torch.Tensor):
-        self.token_shift_state = token_shift_state
+    def __init__(self, shift_state: torch.Tensor, wkv_state: torch.Tensor):
+        self.shift_state = shift_state
         self.wkv_state = wkv_state
 
 
 class ChannelMixState:
 
-    def __init__(self, token_shift_state: torch.Tensor):
-        self.token_shift_state = token_shift_state
+    def __init__(self, shift_state: torch.Tensor):
+        self.shift_state = shift_state
 
 
 class BlockState:
 
-    def __init__(self, time_mix_state: torch.Tensor,
-                 channel_mix_state: torch.Tensor):
+    def __init__(self, time_mix_state: TimeMixState,
+                 channel_mix_state: ChannelMixState):
         self.time_mix_state = time_mix_state
         self.channel_mix_state = channel_mix_state
 
 
-def init_block_state(B, C, device, dtype):
-    wkv_state = torch.zeros((B, C, 3), device=device, dtype=torch.float)
-    wkv_state[:, :, -1] = -1e38
-    token_shift_state = torch.zeros((B, C), device=device, dtype=dtype)
-    return BlockState(TimeMixState(token_shift_state, wkv_state),
-                      ChannelMixState(token_shift_state))
+class BlockStateList:
+
+    def __init__(self, shift_states, wkv_states):
+        self.wkv_states = wkv_states
+        self.shift_states = shift_states
+
+    @staticmethod
+    def create(N, B, C, device, dtype):
+        result = BlockStateList.empty(N, B, C, device, dtype)
+        result.wkv_states[:] = 0
+        result.wkv_states[:, :, :, -1] = -1e38
+        result.shift_states[:] = 0
+        return result
+
+    @staticmethod
+    def empty(N, B, C, device, dtype):
+        wkv_states = torch.empty((N, B, C, 3),
+                                 device=device,
+                                 dtype=torch.float)
+        shift_states = torch.empty((N, 2, B, C), device=device, dtype=dtype)
+        return BlockStateList(shift_states, wkv_states)
+
+    def __getitem__(self, layer: int):
+        return BlockState(
+            TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
+            ChannelMixState(self.shift_states[layer, 1]))
+
+    def __setitem__(self, layer: int, state: BlockState):
+        self.shift_states[layer, 0] = state.time_mix_state.shift_state
+        self.wkv_states[layer] = state.time_mix_state.wkv_state
+        self.shift_states[layer, 1] = state.channel_mix_state.shift_state
 
 
 from torch.utils.cpp_extension import load
@@ -109,8 +135,8 @@ class RWKV_TimeMix(MyModule):
     @MyFunction
     def forward(self, x, last_state: TimeMixState):
         # Mix x with the previous timestep to produce xk, xv, xr
-        xx = torch.concat(
-            (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
+        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+                          dim=1)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -148,8 +174,8 @@ class RWKV_ChannelMix(MyModule):
 
     @MyFunction
     def forward(self, x, last_state: ChannelMixState):
-        xx = torch.concat(
-            (last_state.token_shift_state.unsqueeze(1), x[:, :-1]), dim=1)
+        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+                          dim=1)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         k = self.key(xk)
@@ -213,7 +239,7 @@ class L2Wrap(torch.autograd.Function):
         maxx, ids = torch.max(y, -1, keepdim=True)
         gy = torch.zeros_like(y)
         gy.scatter_(-1, ids, maxx * factor)
-        gy=gy*ctx.currentMask[:,None][None,:]
+        gy = gy * ctx.currentMask[:, None][None, :]
         return (grad_output, gy, None, None)
 
 
@@ -236,6 +262,8 @@ class RWKV(L.LightningModule):
                  beta2: float = 0.99,
                  adam_eps: float = 1.0e-08,
                  weight_decay: float = 0.01,
+                 tbptt_learning: bool = True,
+                 tbptt_learning_range: int = -1,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -259,6 +287,12 @@ class RWKV(L.LightningModule):
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
+        self.tbptt_learning = tbptt_learning
+        self.tbptt_learning_range = tbptt_learning_range
+
+        # # We perform manual optimization step, as per
+        # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+        # self.automatic_optimization = False
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -289,6 +323,10 @@ class RWKV(L.LightningModule):
         self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
+        if self.tbptt_learning == False:
+            if self.deepspeed_stage >= 2 or self.deepspeed_offload:
+                print("[WARNING]: it is highly recommended to enable tbptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
+
         if self.layerwise_lr:
             lr_1x = set()
             lr_2x = set()
@@ -376,7 +414,6 @@ class RWKV(L.LightningModule):
                 'optimizer': optimizer,
                 'lr_scheduler': lr_scheduler,
             }
-        
         else:
             # Skip the lr_scheduler process if lr_init and lr_final are the same
             if starting_lr == ending_lr:
@@ -443,8 +480,13 @@ class RWKV(L.LightningModule):
         if max_epochs > 0:
             return estimated_stepping_batches // max_epochs
 
+        # Get the train_dataloader
+        train_dataloader = self.trainer.train_dataloader
+        if( train_dataloader is None ):
+            train_dataloader = self.trainer.fit_loop._data_source.dataloader()
+
         # Max epoch is not set, use the train_dataloader
-        dataset_size = len(self.trainer.train_dataloader)
+        dataset_size = len(train_dataloader)
         num_devices = max(1, self.trainer.num_devices)
         num_steps = dataset_size // (self.trainer.accumulate_grad_batches * num_devices)
         return num_steps
@@ -456,29 +498,41 @@ class RWKV(L.LightningModule):
             cfg = strategy.config["zero_optimization"]
             return "offload_optimizer" in cfg or "offload_parameters" in cfg
         return False
+    
+    @property
+    def deepspeed_stage(self) -> int:
+        strategy = self.trainer.strategy
+        if isinstance(strategy, DeepSpeedStrategy):
+            cfg = strategy.config["zero_optimization"]
+            return "stage" in cfg
+        return 1
 
-    def forward(self, idx, last_states: List[BlockState]):
+    def forward(self, idx: torch.Tensor, last_shift_states: torch.Tensor,
+                last_wkv_states: torch.Tensor):
         B, T = idx.size()
         assert T <= self.ctx_len, "Cannot forward, model ctx_len is exhausted."
 
         x = self.emb(idx)
 
-        new_states = []
-        for block, last_state in zip(self.blocks, last_states):
+        new_states = BlockStateList.empty(self.n_layer, B, self.n_embd,
+                                          x.device, x.dtype)
+        for i, (block, last_state) in enumerate(
+                zip(self.blocks,
+                    BlockStateList(last_shift_states, last_wkv_states))):
             if self.grad_cp:
                 x, new_state = deepspeed.checkpointing.checkpoint(
                     block, x, last_state)
             else:
                 x, new_state = block(x, last_state)
-            new_states.append(new_state)
+            new_states[i] = new_state
 
         x = self.ln_out(x)
 
         x = self.head(x)
 
-        return x, new_states
+        return x, new_states.shift_states, new_states.wkv_states
 
-    def compute_loss(self, batch, batch_idx, do_cutoff: bool):
+    def compute_loss(self, batch, batch_idx, is_training_run: bool):
         seq = batch['input_ids']
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
         seq_mask = batch['attention_mask']
@@ -486,14 +540,16 @@ class RWKV(L.LightningModule):
         # Check if attent mask is set, if not initialize it
         if seq_mask is None or seq_mask.ndim != 2:
             seq_mask = torch.ones_like(seq[:, 1:])
-        
-        if do_cutoff:
+
+        # Perform cutoff for training run
+        if is_training_run:
             prev_step = 0
             for step, len_cut in zip(self.ctx_len_warmup_steps,
-                                    self.ctx_len_cutoffs):
-                if prev_step <= self.global_step < step and len_cut < seq.shape[1] - 1:
+                                     self.ctx_len_cutoffs):
+                if prev_step <= self.global_step < step and len_cut < seq.shape[
+                        1] - 1:
                     pos = randint(0, seq.shape[1] - len_cut - 1)
-                    
+
                     # Original
                     # seq = seq[:, pos:pos + len_cut + 1]
 
@@ -504,74 +560,160 @@ class RWKV(L.LightningModule):
                     seq_mask[:, :pos] = 0
                     break
                 prev_step = step
-
+                
+        do_tbptt_learning = self.tbptt_learning and is_training_run
         idx, targets = seq[:, :-1], seq[:, 1:]
 
         B, T = idx.shape
         C = self.n_embd
         total_mask_sum = torch.sum(seq_mask)
 
-        def checkpointed_step(idx, targets, mask, prev_loss, last_states,
-                              prev_steps):
-            logits, new_states = self(idx, last_states)
+        # If total_mask_sum, we skip, as there is no tokens of value to learn from anyway
+        if total_mask_sum == 0:
+            return 0
+
+        def checkpointed_step(idx, targets, mask, prev_loss, last_shift_states,
+                              last_wkv_states, prev_steps):
+            logits, new_shift_states, new_wkv_states = self(
+                idx, last_shift_states, last_wkv_states)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
-                                   targets.view(-1), reduction="none")
+                                   targets.view(-1),
+                                   reduction="none")
             submask = mask.view(-1)[:loss.shape[0]]
-            submask_sum=torch.sum(submask)
+            submask_sum = torch.sum(submask)
 
-            # Special handling of empty mask 
-            # (possible when real_ctx_len is larger then ctx_len, which results into 'chunking')
-            if(submask_sum==0):
-                loss = torch.sum(loss * submask) / 1
-                loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
-                new_steps = prev_steps # + submask_sum
-                new_loss = prev_loss+loss
-                return new_loss, new_states, new_steps
-
-            # Handling with mask
-            loss = torch.sum(loss * submask) / submask_sum
+            loss = torch.sum(loss * submask) / total_mask_sum  
             loss = L2Wrap.apply(loss, logits, total_mask_sum, submask)
             new_steps = prev_steps + submask_sum
-            new_loss = prev_loss * (prev_steps / new_steps) + loss * (
-                1 - prev_steps / new_steps)
-            return new_loss, new_states, new_steps
+            new_loss = prev_loss + loss
+            return new_loss, new_shift_states, new_wkv_states, new_steps
 
-        total_loss = torch.tensor(0, dtype=self.emb.weight.dtype)
+        total_loss = torch.tensor(
+            0, dtype=self.emb.weight.dtype).requires_grad_()
         steps = 0
-        states = [
-            init_block_state(B, C, seq.device, self.emb.weight.dtype)
-        ] * self.n_layer
-        for i in range(math.ceil(T / self.ctx_len)):
-            if i != math.ceil(T / self.ctx_len) - 1:
-                total_loss, states, steps = deepspeed.checkpointing.checkpoint(
+        states = BlockStateList.create(self.n_layer, B, C, seq.device,
+                                       self.emb.weight.dtype)
+        segment_count = math.ceil(T / self.ctx_len)
+
+        # We get the average segment size, this helps ensure that the segment
+        # cutoffs do not make the last segment too small, it also helps ensure
+        # the segment cutoff points are more varied, across mixed dataset sizes
+        # to avoid potentially undesired training behaviour at fixed cutoff points
+        # (this only applies for segmented learning)
+        if do_tbptt_learning:
+          segment_size = min(math.ceil(T / segment_count), self.ctx_len)
+        else:
+          segment_size = self.ctx_len
+
+        # The loss array, to store the loss for each segment
+        # this is used for tbptt learning process
+        # Array contains the first to last segment loss
+        loss_array = []
+
+        for i in range(segment_count):
+            # Segmented learning, detaches the graph for each segment
+            if do_tbptt_learning:
+                prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True)
+                prv_shift_state = states.shift_states.clone().detach().requires_grad_(False)
+                prv_wkv_state = states.wkv_states.clone().detach().requires_grad_(False)
+            else:
+                prv_loss = total_loss
+                prv_shift_state = states.shift_states
+                prv_wkv_state = states.wkv_states
+
+            if i < segment_count-1:
+                total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
                     checkpointed_step,
-                    idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
-                    states,
+                    idx[:, i * segment_size:(i + 1) * segment_size],
+                    targets[:, i * segment_size:(i + 1) * segment_size],
+                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
+                    prv_loss,
+                    prv_shift_state,
+                    prv_wkv_state,
                     steps,
                 )
             else:
-                total_loss, states, steps = checkpointed_step(
-                    idx[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    targets[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    seq_mask[:, i * self.ctx_len:(i + 1) * self.ctx_len],
-                    total_loss,
-                    states,
+                total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
+                    idx[:, i * segment_size:(i + 1) * segment_size],
+                    targets[:, i * segment_size:(i + 1) * segment_size],
+                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
+                    prv_loss,
+                    prv_shift_state,
+                    prv_wkv_state,
                     steps,
                 )
 
+            if do_tbptt_learning:
+                loss_array.append(total_loss)
+
+            states = BlockStateList(new_shift_states, new_wkv_states)
+            gc.collect()
+            # torch.cuda.empty_cache()
+
+        if do_tbptt_learning:
+            # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
+            # we would need to implement manual optimization as per
+            # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+            #
+            # Otherwise an error will be thrown if we call `self.manual_backward`
+            #
+            # However this would mean that we would need to do a full reimplementation
+            # of several features that were handled by the automatic optimization.
+            # - accumulate_grad_batches
+            # - gradient_clip_val
+            # - (And probably other features that I am not aware of)
+            #
+            # So this is a hacky work around, we only disable automatic_optimization temporarily
+            # and perform the backward pass manually, and then re-enable the automatic optimization
+            #
+            # From the current code implementatiion, it seem like this is blocked only by 
+            # automatic_optimization flag - and has no adverse side effect otherwise
+            # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
+            #
+            # If anyone have a better idea, let me know
+            # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
+            self.automatic_optimization = False
+            
+            # Get the last loss object
+            last_loss = loss_array[-1]
+
+            # Prepare the total loss, on the same device as the last loss
+            total_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True).to(last_loss.device)
+
+            # Segmented learning range
+            if self.tbptt_learning_range > 0:
+                last_learning_segment = segment_count - self.tbptt_learning_range -1;
+            else:
+                last_learning_segment = 0;
+
+            # Add up the loss that will skip the backward pass
+            if last_learning_segment > 0:
+                for i in range(0, last_learning_segment, 1):
+                    total_loss += loss_array[i].clone().detach()
+                    #.to(last_loss.device)
+
+            # Lets loop through all the segments, and perform the backward pass one by one
+            # except the last segment, which we will let the default backward pass handle
+            for i in range(last_learning_segment, segment_count - 1, 1):
+                self.manual_backward(loss_array[i])
+                total_loss += loss_array[i].clone().detach()
+                #.to(last_loss.device)
+
+            # Add the last segment loss to the total loss
+            total_loss += last_loss
+
+            # Re-enable the automatic optimization
+            # and handle the last loss backward pass as normal
+            self.automatic_optimization = True
+
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
-            # Get the current learning rate
-            lr = self.trainer.optimizers[0].param_groups[0]['lr']
             wandb.log({
                 'substep': batch_idx, 
                 'real_ctx_len': T, 
                 'train/loss': total_loss,
                 'trainer/global_step':self.global_step,
-                'trainer/learning_rate': lr
+                'trainer/learning_rate': self.trainer.optimizers[0].param_groups[0]['lr']
             })
 
         return total_loss

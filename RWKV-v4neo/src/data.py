@@ -5,44 +5,51 @@ from torch.utils.data import Dataset
 from datasets import load_from_disk, load_dataset
 from transformers import PreTrainedTokenizerFast
 from multiprocessing import cpu_count
+import threading
 
-def get_data_module(
-        # load_from_disk(dataset_path) param
-        data_path: str,
-        # load_dataset(path) param
-        source: str = None,
-        # load_dataset(data_dir) param
-        source_data_dir: str = None,
-        # Test split of source data, if it was not already done
-        test_split: float = 0.1,
-        test_split_shuffle: bool = False,
-        # Custom tokenizer settings
-        tokenizer: str = "neox",
-        # Text rechunking size
-        text_rechunk_size: int = 4096,
-        text_rechunk_force: bool = False,
-        # ---
-        # HF dataset conversion helpers
-        # ---
-        # Min / Max token size filtering
-        min_token_size: int = -1,
-        max_token_size: int = -1,
-        # Custom 'text' column to support, mostly used for dataset where the 
-        # desired train data is in another column (eg. 'code')
-        custom_text_key: str = None,
-        # Multi column merging support, used for instruct/input/output datasets
-        # or similar varients where the input and output are in different columns
-        # and need to be merged
-        multi_column_keys: list = None,
-        multi_column_prefix: list = None,
-        multi_column_masking: list = None,
-        multi_column_separator: str = None,
-        # prompt/completion format masking support
-        disable_prompt_mask: bool = False
-    ) -> LightningDataModule:
-    # Number of max cpu cores
-    num_cpus = cpu_count()
+# Number of max cpu cores
+num_cpus = cpu_count()
 
+# Event signaling, for preloading completion
+preload_event = threading.Event()
+# Lock object, for ensuring only one thread is 
+# allocated the preloading task
+preload_lock = threading.Lock()
+
+def preload_data_module(
+    # load_from_disk(dataset_path) param
+    data_path: str,
+    # load_dataset(path) param
+    source: str = None,
+    # load_dataset(data_dir) param
+    source_data_dir: str = None,
+    # Test split of source data, if it was not already done
+    test_split: float = 0.1,
+    test_split_shuffle: bool = False,
+    # Custom tokenizer settings
+    tokenizer: str = "neox",
+    # Text rechunking size
+    text_rechunk_size: int = 4096,
+    text_rechunk_force: bool = False,
+    # ---
+    # HF dataset conversion helpers
+    # ---
+    # Min / Max token size filtering
+    min_token_size: int = -1,
+    max_token_size: int = -1,
+    # Custom 'text' column to support, mostly used for dataset where the 
+    # desired train data is in another column (eg. 'code')
+    custom_text_key: str = None,
+    # Multi column merging support, used for instruct/input/output datasets
+    # or similar varients where the input and output are in different columns
+    # and need to be merged
+    multi_column_keys: list = None,
+    multi_column_prefix: list = None,
+    multi_column_masking: list = None,
+    multi_column_separator: str = None,
+    # prompt/completion format masking support
+    disable_prompt_mask: bool = False
+):
     # Source data processing
     if source is not None:
         if tokenizer is None:
@@ -280,7 +287,7 @@ def get_data_module(
             if max_token_size > 0 and row_length > max_token_size:
                 return False
             return True
-        src_dataset = src_dataset.filter(dataset_filter, num_proc=num_cpus)
+        src_dataset = src_dataset.filter(dataset_filter)
 
         # Perform rechunking after filtering, if source is not a "text" based 
         # dataset and text_rechunk_force is enabled
@@ -296,6 +303,50 @@ def get_data_module(
         
         # Save the dataset to disk
         src_dataset.save_to_disk(data_path)
+
+
+def get_data_module(
+        # load_from_disk(dataset_path) param
+        data_path: str,
+        # load_dataset(path) param
+        source: str = None,
+        # load_dataset(data_dir) param
+        source_data_dir: str = None,
+        # Test split of source data, if it was not already done
+        test_split: float = 0.1,
+        test_split_shuffle: bool = False,
+        # Custom tokenizer settings
+        tokenizer: str = "neox",
+        # Text rechunking size
+        text_rechunk_size: int = 4096,
+        text_rechunk_force: bool = False,
+        # ---
+        # HF dataset conversion helpers
+        # ---
+        # Min / Max token size filtering
+        min_token_size: int = -1,
+        max_token_size: int = -1,
+        # Custom 'text' column to support, mostly used for dataset where the 
+        # desired train data is in another column (eg. 'code')
+        custom_text_key: str = None,
+        # Multi column merging support, used for instruct/input/output datasets
+        # or similar varients where the input and output are in different columns
+        # and need to be merged
+        multi_column_keys: list = None,
+        multi_column_prefix: list = None,
+        multi_column_masking: list = None,
+        multi_column_separator: str = None,
+        # prompt/completion format masking support
+        disable_prompt_mask: bool = False
+    ) -> LightningDataModule:
+
+    # Attempt to acquire the preload lock
+    # if there is already an existing lock, wait for it to finish
+    if preload_lock.acquire(blocking=False):
+        preload_data_module(**locals())
+        preload_event.set()
+    else:
+        preload_event.wait()
 
     # Load the dataset as per normal 
     dataset = load_from_disk(data_path).with_format('torch')
