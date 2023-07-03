@@ -3,7 +3,7 @@ seed_everything: 3941088705
 trainer:
   # Configure the number of GPU, avaliable on your machine
   accelerator: gpu
-  devices: 1
+  devices: auto
   num_nodes: 1
 
   #
@@ -24,7 +24,7 @@ trainer:
   # For more details see:
   # https://lightning.ai/docs/pytorch/stable/advanced/model_parallel.html#deepspeed-zero-stage-2
   #
-  strategy: deepspeed_stage_2
+  strategy: deepspeed_stage_2_offload
 
   # Floating point precision for the model, because RWKV is built FOR bf16
   # you should pretty much never change this setting
