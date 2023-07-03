@@ -264,6 +264,7 @@ class RWKV(L.LightningModule):
                  weight_decay: float = 0.01,
                  tbptt_learning: bool = True,
                  tbptt_learning_range: int = -1,
+                 tbptt_truncated_learning: bool = False,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -289,6 +290,7 @@ class RWKV(L.LightningModule):
         self.adam_eps = adam_eps
         self.tbptt_learning = tbptt_learning
         self.tbptt_learning_range = tbptt_learning_range
+        self.tbptt_truncated_learning = tbptt_truncated_learning
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -638,6 +640,9 @@ class RWKV(L.LightningModule):
             # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
             self.automatic_optimization = False
             
+            # Get the optimizer
+            optimizer = self.optimizers()
+            
             # We get the average segment size, instead of ctx length size.
             # this helps ensure that the segment cutoffs do not make the last segment too small, 
             # it also helps ensure the segment cutoff points are more varied, across mixed dataset sizes
@@ -651,28 +656,43 @@ class RWKV(L.LightningModule):
             else:
                 first_learning_segment = 0;
 
+            # Flag for first optimizer run
+            first_manual_backward = True
+
             for i in range(segment_count):
-                # Segmented learning, detaches the graph for each segment
+                # Apply state truncation, if truncated learning is enabled
+                if self.tbptt_truncated_learning:
+                    prv_shift_states = states.shift_states.clone().detach().requires_grad_(False)
+                    prv_wkv_states = states.wkv_states.clone().detach().requires_grad_(False)
+                else:
+                    prv_shift_states = states.shift_states
+                    prv_wkv_states = states.wkv_states
+                
+                # Segmented learning, applies the forward/pass over each chunk seperately
                 segment_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     idx[:, i * segment_size:(i + 1) * segment_size],
                     targets[:, i * segment_size:(i + 1) * segment_size],
                     seq_mask[:, i * segment_size:(i + 1) * segment_size],
                     torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True),
-                    states.shift_states.clone().detach().requires_grad_(False),
-                    states.wkv_states.clone().detach().requires_grad_(False),
+                    prv_shift_states,
+                    prv_wkv_states,
                     steps,
                 )
                 states = BlockStateList(new_shift_states, new_wkv_states)
 
                 # Compute the backward pass for the segment
-                if i < segment_count - 1:
-                    if i >= first_learning_segment:
-                        self.manual_backward(segment_loss)
-                    total_loss = total_loss + segment_loss.clone().detach()
-                else:
-                    # For the last segment, we do not perform a backward pass, 
-                    # and instead return it for the default backward pass to handle
-                    total_loss = total_loss + segment_loss
+                if i >= first_learning_segment:
+                    if first_manual_backward:
+                        self.manual_backward(segment_loss, optimizer)
+                        first_manual_backward = False
+                    else:
+                        # Undocumented multiple backwar pass support
+                        # https://discord.com/channels/992359628979568762/1123248764132524242/1125374974597795920
+                        self.manual_backward(segment_loss, optimizer, retain_graph=True)
+                
+                # Accumulate the total loss, since there is nothing to backprop here
+                # its respective "backward pass" should be a no-op
+                total_loss = total_loss + segment_loss.clone().detach().requires_grad_(False)
 
                 # GC collect unused memory
                 gc.collect()
