@@ -2,7 +2,7 @@
 import sys
 import yaml 
 import os
-from src.data import get_data_module
+from src.data import preload_data_module
 
 # ----
 # This script is used to preload the huggingface dataset
@@ -30,4 +30,4 @@ assert 'data' in lightning_config, "Data is not configured in the config file"
 data = lightning_config['data']
 
 # Run the get_data_module function to preload the dataset
-get_data_module(**data)
+preload_data_module(**data)
