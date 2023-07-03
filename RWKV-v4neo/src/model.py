@@ -268,7 +268,7 @@ class RWKV(L.LightningModule):
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
                  load_model: Optional[str] = None,
-                 torch_set_float32_matmul_precision:str = None
+                 torch_set_float32_matmul_precision:str = 'high'
                  ):
         super().__init__()
         self.ctx_len = ctx_len
@@ -289,10 +289,6 @@ class RWKV(L.LightningModule):
         self.adam_eps = adam_eps
         self.tbptt_learning = tbptt_learning
         self.tbptt_learning_range = tbptt_learning_range
-
-        # # We perform manual optimization step, as per
-        # # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-        # self.automatic_optimization = False
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -595,62 +591,30 @@ class RWKV(L.LightningModule):
                                        self.emb.weight.dtype)
         segment_count = math.ceil(T / self.ctx_len)
 
-        # We get the average segment size, this helps ensure that the segment
-        # cutoffs do not make the last segment too small, it also helps ensure
-        # the segment cutoff points are more varied, across mixed dataset sizes
-        # to avoid potentially undesired training behaviour at fixed cutoff points
-        # (this only applies for segmented learning)
+        #
+        # TBPTT learning, we split the sequence into segments
+        # and perform a backward pass for each segment, on its own.
+        #
+        # Allowing us to perform backpropagation across context sizes much larger
+        # then what is supported by the current GPU memory.
+        #
+        # This reduces the need for the checkpointing process, and mitigate
+        # a known error where multiple backwards pass throws an exception.
+        #
+        # While not mathematically equivalent to full context size learning,
+        # it makes "infctx" size training possible with deepspeed 2/3
+        #
+        # ---
+        # 
+        # See the following, for more details on "Gradient computed twice" error:
+        # https://github.com/microsoft/DeepSpeed/issues/988#issuecomment-1549417269
+        #
+        # Other possibly related issues on the topic:
+        # https://github.com/microsoft/DeepSpeed/pull/677
+        # https://github.com/EleutherAI/gpt-neox/issues/62#issuecomment-766366413
+        #
         if do_tbptt_learning:
-          segment_size = min(math.ceil(T / segment_count), self.ctx_len)
-        else:
-          segment_size = self.ctx_len
 
-        # The loss array, to store the loss for each segment
-        # this is used for tbptt learning process
-        # Array contains the first to last segment loss
-        loss_array = []
-
-        for i in range(segment_count):
-            # Segmented learning, detaches the graph for each segment
-            if do_tbptt_learning:
-                prv_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True)
-                prv_shift_state = states.shift_states.clone().detach().requires_grad_(False)
-                prv_wkv_state = states.wkv_states.clone().detach().requires_grad_(False)
-            else:
-                prv_loss = total_loss
-                prv_shift_state = states.shift_states
-                prv_wkv_state = states.wkv_states
-
-            if i < segment_count-1:
-                total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
-                    checkpointed_step,
-                    idx[:, i * segment_size:(i + 1) * segment_size],
-                    targets[:, i * segment_size:(i + 1) * segment_size],
-                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
-                    prv_loss,
-                    prv_shift_state,
-                    prv_wkv_state,
-                    steps,
-                )
-            else:
-                total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
-                    idx[:, i * segment_size:(i + 1) * segment_size],
-                    targets[:, i * segment_size:(i + 1) * segment_size],
-                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
-                    prv_loss,
-                    prv_shift_state,
-                    prv_wkv_state,
-                    steps,
-                )
-
-            if do_tbptt_learning:
-                loss_array.append(total_loss)
-
-            states = BlockStateList(new_shift_states, new_wkv_states)
-            gc.collect()
-            # torch.cuda.empty_cache()
-
-        if do_tbptt_learning:
             # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
             # we would need to implement manual optimization as per
             # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
@@ -674,37 +638,80 @@ class RWKV(L.LightningModule):
             # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
             self.automatic_optimization = False
             
-            # Get the last loss object
-            last_loss = loss_array[-1]
-
-            # Prepare the total loss, on the same device as the last loss
-            total_loss = torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True).to(last_loss.device)
+            # We get the average segment size, instead of ctx length size.
+            # this helps ensure that the segment cutoffs do not make the last segment too small, 
+            # it also helps ensure the segment cutoff points are more varied, across mixed dataset sizes
+            # to avoid potentially undesired training behaviour at fixed cutoff points
+            # (this only applies for segmented learning)
+            segment_size = min(math.ceil(T / segment_count), self.ctx_len)
 
             # Segmented learning range
             if self.tbptt_learning_range > 0:
-                last_learning_segment = segment_count - self.tbptt_learning_range -1;
+                first_learning_segment = segment_count - self.tbptt_learning_range;
             else:
-                last_learning_segment = 0;
+                first_learning_segment = 0;
 
-            # Add up the loss that will skip the backward pass
-            if last_learning_segment > 0:
-                for i in range(0, last_learning_segment, 1):
-                    total_loss += loss_array[i].clone().detach()
-                    #.to(last_loss.device)
+            for i in range(segment_count):
+                # Segmented learning, detaches the graph for each segment
+                segment_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
+                    idx[:, i * segment_size:(i + 1) * segment_size],
+                    targets[:, i * segment_size:(i + 1) * segment_size],
+                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
+                    torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True),
+                    states.shift_states.clone().detach().requires_grad_(False),
+                    states.wkv_states.clone().detach().requires_grad_(False),
+                    steps,
+                )
+                states = BlockStateList(new_shift_states, new_wkv_states)
 
-            # Lets loop through all the segments, and perform the backward pass one by one
-            # except the last segment, which we will let the default backward pass handle
-            for i in range(last_learning_segment, segment_count - 1, 1):
-                self.manual_backward(loss_array[i])
-                total_loss += loss_array[i].clone().detach()
-                #.to(last_loss.device)
+                # Compute the backward pass for the segment
+                if i < segment_count - 1:
+                    if i >= first_learning_segment:
+                        self.manual_backward(segment_loss)
+                    total_loss = total_loss + segment_loss.clone().detach()
+                else:
+                    # For the last segment, we do not perform a backward pass, 
+                    # and instead return it for the default backward pass to handle
+                    total_loss = total_loss + segment_loss
 
-            # Add the last segment loss to the total loss
-            total_loss += last_loss
+                # GC collect unused memory
+                gc.collect()
+                # torch.cuda.empty_cache()
 
             # Re-enable the automatic optimization
             # and handle the last loss backward pass as normal
             self.automatic_optimization = True
+
+        else:
+
+            # Normal operations without TBPTT
+            segment_size = self.ctx_len
+            for i in range(segment_count):
+                if i < segment_count-1:
+                    total_loss, new_shift_states, new_wkv_states, steps = deepspeed.checkpointing.checkpoint(
+                        checkpointed_step,
+                        idx[:, i * segment_size:(i + 1) * segment_size],
+                        targets[:, i * segment_size:(i + 1) * segment_size],
+                        seq_mask[:, i * segment_size:(i + 1) * segment_size],
+                        total_loss,
+                        states.shift_states,
+                        states.wkv_states,
+                        steps,
+                    )
+                else:
+                    total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
+                        idx[:, i * segment_size:(i + 1) * segment_size],
+                        targets[:, i * segment_size:(i + 1) * segment_size],
+                        seq_mask[:, i * segment_size:(i + 1) * segment_size],
+                        total_loss,
+                        states.shift_states,
+                        states.wkv_states,
+                        steps,
+                    )
+
+                states = BlockStateList(new_shift_states, new_wkv_states)
+                gc.collect()
+                # torch.cuda.empty_cache()
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
