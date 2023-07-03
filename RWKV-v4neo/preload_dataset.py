@@ -2,7 +2,7 @@
 import sys
 import yaml 
 import os
-from src.data import preload_data_module
+from src.data import RWKVDataModule
 
 # ----
 # This script is used to preload the huggingface dataset
@@ -30,4 +30,5 @@ assert 'data' in lightning_config, "Data is not configured in the config file"
 data = lightning_config['data']
 
 # Run the get_data_module function to preload the dataset
-preload_data_module(**data)
+dataClass = RWKVDataModule(**data)
+dataClass.prepare_data()
