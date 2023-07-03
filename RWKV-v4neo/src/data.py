@@ -7,15 +7,36 @@ from transformers import PreTrainedTokenizerFast
 from multiprocessing import cpu_count
 import threading
 
+# File locking utilities, used to ensure thread safety on the preloading process
+try:
+    # Posix based file locking (Linux, Ubuntu, MacOS, etc.)
+    #   Only allows locking on writable files, might cause
+    #   strange results for reading.
+    import fcntl, os
+    def write_lock_file(f):
+        if f.writable(): fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    def read_lock_file(f):
+        if f.writable(): fcntl.lockf(f, fcntl.LOCK_SH)
+    def unlock_file(f):
+        if f.writable(): fcntl.lockf(f, fcntl.LOCK_UN)
+except ModuleNotFoundError:
+    # Windows file locking
+    import msvcrt, os
+    def file_size(f):
+        return os.path.getsize( os.path.realpath(f.name) )
+    def write_lock_file(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size(f))
+    def read_lock_file(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_RLCK, file_size(f))
+    def unlock_file(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, file_size(f))
+
 # Number of max cpu cores
 num_cpus = cpu_count()
 
-# Event signaling, for preloading completion
-preload_event = threading.Event()
-# Lock object, for ensuring only one thread is 
-# allocated the preloading task
-preload_lock = threading.Lock()
-
+# Preloading of data module needs only to be done once
+# as such its logic is seperated out from the rest of the dataloader
+# which is called multiple times, for each gpu device
 def preload_data_module(
     # load_from_disk(dataset_path) param
     data_path: str,
@@ -48,7 +69,10 @@ def preload_data_module(
     multi_column_masking: list = None,
     multi_column_separator: str = None,
     # prompt/completion format masking support
-    disable_prompt_mask: bool = False
+    disable_prompt_mask: bool = False,
+    # disable dataset preloading on run
+    # ignored inside preload_data_module function
+    disable_dataset_preload: bool = False
 ):
     # Source data processing
     if source is not None:
@@ -337,16 +361,51 @@ def get_data_module(
         multi_column_masking: list = None,
         multi_column_separator: str = None,
         # prompt/completion format masking support
-        disable_prompt_mask: bool = False
+        disable_prompt_mask: bool = False,
+        # disable dataset preloading on run
+        # ignored inside preload_data_module function
+        disable_dataset_preload: bool = False
     ) -> LightningDataModule:
 
-    # Attempt to acquire the preload lock
-    # if there is already an existing lock, wait for it to finish
-    if preload_lock.acquire(blocking=False):
-        preload_data_module(**locals())
-        preload_event.set()
-    else:
-        preload_event.wait()
+    # We only attempt to preload the dataset if its required
+    if source is not None and disable_dataset_preload is False:
+        # Capture the local map upfront
+        localMap = locals()
+
+        # Ensure data path exists, create the directory if it does not
+        if not os.path.exists(data_path):
+            os.makedirs(data_path)
+
+        # Perform a write lock on the preload function
+        lockPath = os.path.join(data_path, ".data_lockfile")
+        try:
+            lockFile = open(lockPath, "w+")
+            write_lock_file(lockFile)
+            print("[data.py] Preloading dataset with file lock")
+            preload_data_module(**localMap)
+            print("[data.py] Preloading complete, releasing file lock")
+            unlock_file(lockFile)
+        except Exception as error:
+            # Get the error no
+            errorNo = error.errno if hasattr(error, "errno") else -1
+
+            # We currently should expect and ignore error 11
+            # `[Errno 11] Resource temporarily unavailable`
+            # as this is the expected behaviour
+            if errorNo != 11:
+                # Raise the error if its not error 11
+                print("[data.py] Unexpected error while preloading dataset with file lock")
+                print("[data.py] Consider setting `disable_dataset_preload = True` to disable dataset preloading, and ensure that your dataset is loaded with `preload_dataset.py` before the training process")
+                raise error
+            else:
+                print("[data.py] Skipping dataset preload with file lock (preload performed by another thread)")
+
+        # Perform a blocking read lock subsequently
+        # we intentionally do not unlock the file
+        # (this will be done by the OS, when the process exits)
+        lockFile = open(lockPath, "r")
+        read_lock_file(lockFile)
+        print("[data.py] Reading dataset with read lock")
 
     # Load the dataset as per normal 
     dataset = load_from_disk(data_path).with_format('torch')
