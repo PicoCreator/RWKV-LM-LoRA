@@ -83,8 +83,8 @@ trainer:
       filename: null
       
       # Save the top/last K checkpoints
-      save_top_k: 5
-      # Choose by the most recent checkpoints (time based)
+      save_top_k: 3
+      # Choose by the most recent checkpoints (step based)
       monitor: 'step'
       mode: max
       
