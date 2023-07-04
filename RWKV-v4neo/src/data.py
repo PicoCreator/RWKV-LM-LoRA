@@ -1,16 +1,335 @@
 from lightning import LightningDataModule
 
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 from datasets import load_from_disk, load_dataset
 from transformers import PreTrainedTokenizerFast
 from multiprocessing import cpu_count
+import threading
 
+# File locking utilities, used to ensure thread safety on the preloading process
+try:
+    # Posix based file locking (Linux, Ubuntu, MacOS, etc.)
+    #   Only allows locking on writable files, might cause
+    #   strange results for reading.
+    import fcntl, os
+    def write_lock_file(f):
+        if f.writable(): fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    def read_lock_file(f):
+        if f.writable(): fcntl.lockf(f, fcntl.LOCK_SH)
+    def unlock_file(f):
+        if f.writable(): fcntl.lockf(f, fcntl.LOCK_UN)
+except ModuleNotFoundError:
+    # Windows file locking
+    import msvcrt, os
+    def file_size(f):
+        return os.path.getsize( os.path.realpath(f.name) )
+    def write_lock_file(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, file_size(f))
+    def read_lock_file(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_RLCK, file_size(f))
+    def unlock_file(f):
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, file_size(f))
+
+# Number of max cpu cores
 num_cpus = cpu_count()
 
-class RWKVDataModule(LightningDataModule):
-    def __init__(
-        self, 
+# Preloading of data module needs only to be done once
+# as such its logic is seperated out from the rest of the dataloader
+# which is called multiple times, for each gpu device
+def preload_data_module(
+    # load_from_disk(dataset_path) param
+    data_path: str,
+    # load_dataset(path) param
+    source: str = None,
+    # load_dataset(data_dir) param
+    source_data_dir: str = None,
+    # Test split of source data, if it was not already done
+    test_split: float = 0.1,
+    test_split_shuffle: bool = False,
+    # Custom tokenizer settings
+    tokenizer: str = "neox",
+    # Text rechunking size
+    text_rechunk_size: int = 4096,
+    text_rechunk_force: bool = False,
+    # ---
+    # HF dataset conversion helpers
+    # ---
+    # Min / Max token size filtering
+    min_token_size: int = -1,
+    max_token_size: int = -1,
+    # Custom 'text' column to support, mostly used for dataset where the 
+    # desired train data is in another column (eg. 'code')
+    custom_text_key: str = None,
+    # Multi column merging support, used for instruct/input/output datasets
+    # or similar varients where the input and output are in different columns
+    # and need to be merged
+    multi_column_keys: list = None,
+    multi_column_prefix: list = None,
+    multi_column_masking: list = None,
+    multi_column_separator: str = None,
+    # prompt/completion format masking support
+    disable_prompt_mask: bool = False,
+    # disable dataset preloading on run
+    # ignored inside preload_data_module function
+    disable_dataset_preload: bool = False
+):
+    # Source data processing
+    if source is not None:
+        if tokenizer is None:
+            raise ValueError('Tokenizer must be specified if source is specified')
+
+        # Setup the basic load_dataset params
+        load_dataset_params = {
+            'path': source,
+            'num_proc': num_cpus
+        }
+
+        # Handle advance params (if set)
+        if source_data_dir is not None:
+            load_dataset_params['data_dir'] = source_data_dir
+
+        # Load the dataset
+        src_dataset = load_dataset(**load_dataset_params)
+
+        # Load the tokenizer
+        # according to either its predefined name or its path
+        # (defaults to neox)
+        if tokenizer == "neox":
+            tokenizer_file = "./20B_tokenizer.json"
+            tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_file)
+        elif tokenizer == "world":
+            raise NotImplementedError("World tokenizer not implemented yet")
+        else:
+            tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer)
+
+        # Multi column merging default values setup
+        if multi_column_keys is None:
+            multi_column_keys = ['instruction', 'input', 'output']
+            multi_column_prefix = ['Instruction:\n', 'Input:\n', 'Output:\n']
+            multi_column_masking = [True, True, False]
+            multi_column_separator = '\n\n'
+        
+        # Tokenized encodings for multi column keys
+        multi_column_enabled = len(multi_column_keys) > 0
+        multi_column_prefix_encodings = []
+        multi_column_seperator_encodings = None
+
+        # Process the multi column settings
+        if multi_column_enabled:
+            # Check if the multi column keys lengths are valid (only if it is enabled)
+            if len(multi_column_keys) != len(multi_column_prefix) or len(multi_column_keys) != len(multi_column_masking):
+                raise ValueError('Multi column keys, prefix and masking must be the same length')
+            # Tokenize the multi column strings
+            for i in range(len(multi_column_keys)):
+                multi_column_prefix_encodings.append(tokenizer(multi_column_prefix[i]))
+            # Tokenize the multi column seperator
+            if multi_column_separator is not None and len(multi_column_separator) > 0:
+                multi_column_seperator_encodings = tokenizer(multi_column_separator)
+
+        # Maps the dataset record to the tokenized result
+        # handles a wide variety of format according to the data configuration
+        #
+        # - custom text keys
+        # - multiple key columns merged
+        # - prompt/completion format
+        # - text column itself
+        #
+        # Throws an error, if it failed to process the record
+        #
+        # This is called for each row record in the dataset
+        def map_tokenizer(x):
+            # Custom text column support
+            if custom_text_key is not None:
+                if custom_text_key in x:
+                    return tokenizer(x[custom_text_key])
+                
+            # Multi column merging support
+            if multi_column_enabled:
+                # Lets count the number of columns we have
+                # that have data in them
+                num_columns = 0
+                for i in range(len(multi_column_keys)):
+                    if multi_column_keys[i] in x and x[multi_column_keys[i]] is not None and len(x[multi_column_keys[i]]) > 0:
+                        num_columns += 1
+                # If we have more than 1 column, we will have to merge them
+                if num_columns > 1:
+                    # Array of output values we will return
+                    input_ids = []
+                    token_type_ids = []
+                    attention_mask = []
+
+                    # First item flag
+                    is_first_item = True
+
+                    # Lets loop through each column
+                    for i in range(len(multi_column_keys)):
+                        # And process the column if it has data
+                        if multi_column_keys[i] in x and x[multi_column_keys[i]] is not None and len(x[multi_column_keys[i]]) > 0:
+                            # Add the seperator if this is not the first item
+                            if not is_first_item and multi_column_seperator_encodings is not None:
+                                input_ids += multi_column_seperator_encodings['input_ids']
+                                token_type_ids += multi_column_seperator_encodings['token_type_ids']
+                                attention_mask += multi_column_seperator_encodings['attention_mask']
+                            
+                            # Add the prefix
+                            input_ids += multi_column_prefix_encodings[i]['input_ids']
+                            token_type_ids += multi_column_prefix_encodings[i]['token_type_ids']
+                            attention_mask += multi_column_prefix_encodings[i]['attention_mask']
+
+                            # Tokenize the column
+                            column_encodings = tokenizer(x[multi_column_keys[i]])
+
+                            # Add the column
+                            input_ids += column_encodings['input_ids']
+                            token_type_ids += column_encodings['token_type_ids']
+
+                            # Override the attention mask if masking is enabled
+                            if multi_column_masking[i]:
+                                attention_mask += ([1] * len(column_encodings['input_ids']))
+                            else:
+                                attention_mask += column_encodings['attention_mask']
+                    
+                    # Return the merged columns
+                    return {
+                        'input_ids': input_ids,
+                        'token_type_ids': token_type_ids,
+                        'attention_mask': attention_mask
+                    }
+
+            # Prompt completion support
+            if 'prompt' in x and 'completion' in x:
+                # Array of output values we will return
+                input_ids = None
+                token_type_ids = None
+                attention_mask = None
+
+                # Tokenize both prompt and completion
+                # Note that the tokenizer will process and return the input_ids in batches
+                prompt_encodings = tokenizer(x['prompt'])
+                completion_encodings = tokenizer(x['completion'])
+
+                # Join the two input_ids lists
+                input_ids = prompt_encodings['input_ids'] + completion_encodings['input_ids']
+                # Join the two token_type_ids lists
+                token_type_ids = prompt_encodings['token_type_ids'] + completion_encodings['token_type_ids']
+                # Setup the attention mask, 0 for prompt, 1 for completion, if masking is enabled
+                if disable_prompt_mask:
+                    attention_mask = ([1] * len(prompt_encodings['input_ids']) + [1] * len(completion_encodings['input_ids']))
+                else:
+                    attention_mask = ([0] * len(prompt_encodings['input_ids']) + [1] * len(completion_encodings['input_ids']))
+
+                # Prepare and return the output object
+                return {
+                    'input_ids': input_ids,
+                    'token_type_ids': token_type_ids,
+                    'attention_mask': attention_mask,
+                }
+            
+            # Fallback to standard text tokenization
+            if 'text' in x:
+                return tokenizer(x['text'])
+            
+            raise ValueError('Invalid dataset format, must contain either the configured "multi column" or prompt/completion or text')
+
+        # Map the dataset to the tokenizer, removing the old text column
+        src_dataset = src_dataset.map(map_tokenizer, batched=False, num_proc=num_cpus)
+        
+        # Remove all features, except input_ids, token_type_ids and attention_mask
+        # as the metadata/etc columns may cause problems down the line (when passed to the trainer)
+        dataset_features = src_dataset["train"].features
+        dataset_features_to_remove = {k: v for k, v in dataset_features.items() if k not in ["input_ids", "token_type_ids", "attention_mask"]}
+        src_dataset = src_dataset.remove_columns(list(dataset_features_to_remove.keys()))
+        
+        # Get the newline token
+        newline_tokenSet = tokenizer(["\n"])
+
+        # See if rechunking is needed, this is useful mostly for "text" based datasets
+        # where we would need to split them into "digestable" context length sizes 
+        # used for foundation training
+        # ---
+
+        # The rechunking function
+        def rechunk_text(x):
+            # Full Raw values that we will need to "rechunk"
+            full_input_ids = []
+            full_token_type_ids = []
+            full_attention_mask = []
+
+            # Loop through the x input, and build the raw values
+            for i in range(len(x["input_ids"])):
+                # Get the respective values and push them to the 
+                # raw value array, effectively merging the arrays together
+                # with the newline token in between
+                full_input_ids += x["input_ids"][i] + newline_tokenSet["input_ids"][0]
+                full_token_type_ids += x["token_type_ids"][i] + newline_tokenSet["token_type_ids"][0]
+                full_attention_mask += x["attention_mask"][i] + newline_tokenSet["attention_mask"][0]
+            
+            # Total length, and sample count
+            # note that thte "remainder" will be discarded
+            total_len = len(full_input_ids)
+            total_samples = total_len // text_rechunk_size
+
+            # The output arrays
+            out_input_ids = []
+            out_token_type_ids = []
+            out_attention_mask = []
+
+            # Generate the output arrays
+            for i in range(total_samples):
+                # Calculate the start and end of the sample
+                start = i * text_rechunk_size
+                end = start + text_rechunk_size
+
+                # Push the sample to the output arrays
+                out_input_ids.append(full_input_ids[start:end])
+                out_token_type_ids.append(full_token_type_ids[start:end])
+                out_attention_mask.append(full_attention_mask[start:end])
+            
+            # Prepare and return the output object
+            ret = {
+                'input_ids': out_input_ids,
+                'token_type_ids': out_token_type_ids,
+                'attention_mask': out_attention_mask,
+            }
+            return ret
+
+        # Perform rechunking if needed for "text" based datasets
+        if source == "text" and text_rechunk_size > 0:
+            src_dataset = src_dataset.map(rechunk_text, batched=True, 
+                                          batch_size=text_rechunk_size*10,
+                                          num_proc=num_cpus)
+        
+        # Remove empty datasets (it causes an error otherwise)
+        # and perform min/max length filtering (if configured)
+        def dataset_filter(x):
+            row_length = len(x["input_ids"])
+            if row_length <= 0:
+                return False
+            if min_token_size > 0 and row_length < min_token_size:
+                return False
+            if max_token_size > 0 and row_length > max_token_size:
+                return False
+            return True
+        src_dataset = src_dataset.filter(dataset_filter, num_proc=num_cpus)
+
+        # Perform rechunking after filtering, if source is not a "text" based 
+        # dataset and text_rechunk_force is enabled
+        if source != "text" and text_rechunk_size > 0 and text_rechunk_force:
+            src_dataset = src_dataset.map(rechunk_text, batched=True, 
+                                          batch_size=text_rechunk_size*2,
+                                          num_proc=num_cpus)
+
+        # Check if the dataset does not have a test split
+        # and if so, perform the split
+        if 'test' not in src_dataset.keys():
+            src_dataset = src_dataset['train'].train_test_split(test_size=test_split,shuffle=test_split_shuffle)
+        
+        # Save the dataset to disk
+        src_dataset.save_to_disk(data_path)
+
+
+def get_data_module(
         # load_from_disk(dataset_path) param
         data_path: str,
         # load_dataset(path) param
@@ -42,296 +361,52 @@ class RWKVDataModule(LightningDataModule):
         multi_column_masking: list = None,
         multi_column_separator: str = None,
         # prompt/completion format masking support
-        disable_prompt_mask: bool = False
-    ):
-        super().__init__()
-        self.data_path = data_path
-        self.source = source
-        self.source_data_dir = source_data_dir
-        self.test_split = test_split
-        self.test_split_shuffle = test_split_shuffle
-        self.tokenizer = tokenizer
-        self.text_rechunk_size = text_rechunk_size
-        self.text_rechunk_force = text_rechunk_force
-        self.min_token_size = min_token_size
-        self.max_token_size = max_token_size
-        self.custom_text_key = custom_text_key
-        self.multi_column_keys = multi_column_keys
-        self.multi_column_prefix = multi_column_prefix
-        self.multi_column_masking = multi_column_masking
-        self.multi_column_separator = multi_column_separator
-        self.disable_prompt_mask = disable_prompt_mask
-    
-    # Called once for initial setup
-    def prepare_data(self):
-        # Source data processing
-        if self.source is not None:
-            if self.tokenizer is None:
-                raise ValueError('Tokenizer must be specified if source is specified')
+        disable_prompt_mask: bool = False,
+        # disable dataset preloading on run
+        # ignored inside preload_data_module function
+        disable_dataset_preload: bool = False
+    ) -> LightningDataModule:
 
-            # Setup the basic load_dataset params
-            load_dataset_params = {
-                'path': self.source,
-                'num_proc': num_cpus
-            }
+    # We only attempt to preload the dataset if its required
+    if source is not None and disable_dataset_preload is False:
+        # Capture the local map upfront
+        localMap = locals()
 
-            # Handle advance params (if set)
-            if self.source_data_dir is not None:
-                load_dataset_params['data_dir'] = self.source_data_dir
+        # Ensure data path exists, create the directory if it does not
+        if not os.path.exists(data_path):
+            os.makedirs(data_path)
 
-            # Load the dataset
-            src_dataset = load_dataset(**load_dataset_params)
+        # Perform a write lock on the preload function
+        lockPath = os.path.join(data_path, ".data_lockfile")
+        try:
+            lockFile = open(lockPath, "w+")
+            write_lock_file(lockFile)
+            print("[data.py] Preloading dataset with file lock")
+            preload_data_module(**localMap)
+            print("[data.py] Preloading complete, releasing file lock")
+            unlock_file(lockFile)
+        except Exception as error:
+            # Get the error no
+            errorNo = error.errno if hasattr(error, "errno") else -1
 
-            # Load the tokenizer
-            # according to either its predefined name or its path
-            # (defaults to neox)
-            if self.tokenizer == "neox":
-                tokenizer_file = "./20B_tokenizer.json"
-                tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_file)
-            elif self.tokenizer == "world":
-                raise NotImplementedError("World tokenizer not implemented yet")
+            # We currently should expect and ignore error 11
+            # `[Errno 11] Resource temporarily unavailable`
+            # as this is the expected behaviour
+            if errorNo != 11:
+                # Raise the error if its not error 11
+                print("[data.py] Unexpected error while preloading dataset with file lock")
+                print("[data.py] Consider setting `disable_dataset_preload = True` to disable dataset preloading, and ensure that your dataset is loaded with `preload_dataset.py` before the training process")
+                raise error
             else:
-                tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer)
+                print("[data.py] Skipping dataset preload with file lock (preload performed by another thread)")
 
-            # Multi column merging default values setup
-            if self.multi_column_keys is None:
-                multi_column_keys = ['instruction', 'input', 'output']
-                multi_column_prefix = ['Instruction:\n', 'Input:\n', 'Output:\n']
-                multi_column_masking = [True, True, False]
-                multi_column_separator = '\n\n'
-            else:
-                multi_column_keys = self.multi_column_keys
-                multi_column_prefix = self.multi_column_prefix
-                multi_column_masking = self.multi_column_masking
-                multi_column_separator = self.multi_column_separator
-            
-            # Tokenized encodings for multi column keys
-            multi_column_enabled = len(multi_column_keys) > 0
-            multi_column_prefix_encodings = []
-            multi_column_seperator_encodings = None
+        # Perform a blocking read lock subsequently
+        # we intentionally do not unlock the file
+        # (this will be done by the OS, when the process exits)
+        lockFile = open(lockPath, "r")
+        read_lock_file(lockFile)
+        print("[data.py] Reading dataset with read lock")
 
-            # Process the multi column settings
-            if multi_column_enabled:
-                # Check if the multi column keys lengths are valid (only if it is enabled)
-                if len(multi_column_keys) != len(multi_column_prefix) or len(multi_column_keys) != len(multi_column_masking):
-                    raise ValueError('Multi column keys, prefix and masking must be the same length')
-                # Tokenize the multi column strings
-                for i in range(len(multi_column_keys)):
-                    multi_column_prefix_encodings.append(tokenizer(multi_column_prefix[i]))
-                # Tokenize the multi column seperator
-                if multi_column_separator is not None and len(multi_column_separator) > 0:
-                    multi_column_seperator_encodings = tokenizer(multi_column_separator)
-            
-            # Maps the dataset record to the tokenized result
-            # handles a wide variety of format according to the data configuration
-            #
-            # - custom text keys
-            # - multiple key columns merged
-            # - prompt/completion format
-            # - text column itself
-            #
-            # Throws an error, if it failed to process the record
-            #
-            # This is called for each row record in the dataset
-            def map_tokenizer(x):
-                # Custom text column support
-                if self.custom_text_key is not None:
-                    if self.custom_text_key in x:
-                        return tokenizer(x[self.custom_text_key])
-                    
-                # Multi column merging support
-                if multi_column_enabled:
-                    # Lets count the number of columns we have
-                    # that have data in them
-                    num_columns = 0
-                    for i in range(len(multi_column_keys)):
-                        if multi_column_keys[i] in x and x[multi_column_keys[i]] is not None and len(x[multi_column_keys[i]]) > 0:
-                            num_columns += 1
-                    # If we have more than 1 column, we will have to merge them
-                    if num_columns > 1:
-                        # Array of output values we will return
-                        input_ids = []
-                        token_type_ids = []
-                        attention_mask = []
-
-                        # First item flag
-                        is_first_item = True
-
-                        # Lets loop through each column
-                        for i in range(len(multi_column_keys)):
-                            # And process the column if it has data
-                            if multi_column_keys[i] in x and x[multi_column_keys[i]] is not None and len(x[multi_column_keys[i]]) > 0:
-                                # Add the seperator if this is not the first item
-                                if not is_first_item and multi_column_seperator_encodings is not None:
-                                    input_ids += multi_column_seperator_encodings['input_ids']
-                                    token_type_ids += multi_column_seperator_encodings['token_type_ids']
-                                    attention_mask += multi_column_seperator_encodings['attention_mask']
-                                
-                                # Add the prefix
-                                input_ids += multi_column_prefix_encodings[i]['input_ids']
-                                token_type_ids += multi_column_prefix_encodings[i]['token_type_ids']
-                                attention_mask += multi_column_prefix_encodings[i]['attention_mask']
-
-                                # Tokenize the column
-                                column_encodings = tokenizer(x[multi_column_keys[i]])
-
-                                # Add the column
-                                input_ids += column_encodings['input_ids']
-                                token_type_ids += column_encodings['token_type_ids']
-
-                                # Override the attention mask if masking is enabled
-                                if multi_column_masking[i]:
-                                    attention_mask += ([1] * len(column_encodings['input_ids']))
-                                else:
-                                    attention_mask += column_encodings['attention_mask']
-                        
-                        # Return the merged columns
-                        return {
-                            'input_ids': input_ids,
-                            'token_type_ids': token_type_ids,
-                            'attention_mask': attention_mask
-                        }
-
-                # Prompt completion support
-                if 'prompt' in x and 'completion' in x:
-                    # Array of output values we will return
-                    input_ids = None
-                    token_type_ids = None
-                    attention_mask = None
-
-                    # Tokenize both prompt and completion
-                    # Note that the tokenizer will process and return the input_ids in batches
-                    prompt_encodings = tokenizer(x['prompt'])
-                    completion_encodings = tokenizer(x['completion'])
-
-                    # Join the two input_ids lists
-                    input_ids = prompt_encodings['input_ids'] + completion_encodings['input_ids']
-                    # Join the two token_type_ids lists
-                    token_type_ids = prompt_encodings['token_type_ids'] + completion_encodings['token_type_ids']
-                    # Setup the attention mask, 0 for prompt, 1 for completion, if masking is enabled
-                    if self.disable_prompt_mask:
-                        attention_mask = ([1] * len(prompt_encodings['input_ids']) + [1] * len(completion_encodings['input_ids']))
-                    else:
-                        attention_mask = ([0] * len(prompt_encodings['input_ids']) + [1] * len(completion_encodings['input_ids']))
-
-                    # Prepare and return the output object
-                    return {
-                        'input_ids': input_ids,
-                        'token_type_ids': token_type_ids,
-                        'attention_mask': attention_mask,
-                    }
-                
-                # Fallback to standard text tokenization
-                if 'text' in x:
-                    return tokenizer(x['text'])
-                
-                raise ValueError('Invalid dataset format, must contain either the configured "multi column" or prompt/completion or text')
-
-            # Map the dataset to the tokenizer, removing the old text column
-            src_dataset = src_dataset.map(map_tokenizer, batched=False, num_proc=num_cpus)
-            
-            # Remove all features, except input_ids, token_type_ids and attention_mask
-            # as the metadata/etc columns may cause problems down the line (when passed to the trainer)
-            dataset_features = src_dataset["train"].features
-            dataset_features_to_remove = {k: v for k, v in dataset_features.items() if k not in ["input_ids", "token_type_ids", "attention_mask"]}
-            src_dataset = src_dataset.remove_columns(list(dataset_features_to_remove.keys()))
-            
-            # Get the newline token
-            newline_tokenSet = tokenizer(["\n"])
-
-            # See if rechunking is needed, this is useful mostly for "text" based datasets
-            # where we would need to split them into "digestable" context length sizes 
-            # used for foundation training
-            # ---
-
-            # The rechunking function
-            def rechunk_text(x):
-                # Full Raw values that we will need to "rechunk"
-                full_input_ids = []
-                full_token_type_ids = []
-                full_attention_mask = []
-
-                # Loop through the x input, and build the raw values
-                for i in range(len(x["input_ids"])):
-                    # Get the respective values and push them to the 
-                    # raw value array, effectively merging the arrays together
-                    # with the newline token in between
-                    full_input_ids += x["input_ids"][i] + newline_tokenSet["input_ids"][0]
-                    full_token_type_ids += x["token_type_ids"][i] + newline_tokenSet["token_type_ids"][0]
-                    full_attention_mask += x["attention_mask"][i] + newline_tokenSet["attention_mask"][0]
-                
-                # Total length, and sample count
-                # note that thte "remainder" will be discarded
-                total_len = len(full_input_ids)
-                total_samples = total_len // self.text_rechunk_size
-
-                # The output arrays
-                out_input_ids = []
-                out_token_type_ids = []
-                out_attention_mask = []
-
-                # Generate the output arrays
-                for i in range(total_samples):
-                    # Calculate the start and end of the sample
-                    start = i * self.text_rechunk_size
-                    end = start + self.text_rechunk_size
-
-                    # Push the sample to the output arrays
-                    out_input_ids.append(full_input_ids[start:end])
-                    out_token_type_ids.append(full_token_type_ids[start:end])
-                    out_attention_mask.append(full_attention_mask[start:end])
-                
-                # Prepare and return the output object
-                ret = {
-                    'input_ids': out_input_ids,
-                    'token_type_ids': out_token_type_ids,
-                    'attention_mask': out_attention_mask,
-                }
-                return ret
-
-            # Perform rechunking if needed for "text" based datasets
-            if self.source == "text" and self.text_rechunk_size > 0:
-                src_dataset = src_dataset.map(rechunk_text, batched=True, 
-                                            batch_size=self.text_rechunk_size*10,
-                                            num_proc=num_cpus)
-            
-            # Remove empty datasets (it causes an error otherwise)
-            # and perform min/max length filtering (if configured)
-            def dataset_filter(x):
-                row_length = len(x["input_ids"])
-                if row_length <= 0:
-                    return False
-                if self.min_token_size > 0 and row_length < self.min_token_size:
-                    return False
-                if self.max_token_size > 0 and row_length > self.max_token_size:
-                    return False
-                return True
-            src_dataset = src_dataset.filter(dataset_filter, num_proc=num_cpus)
-
-            # Perform rechunking after filtering, if source is not a "text" based 
-            # dataset and text_rechunk_force is enabled
-            if self.source != "text" and self.text_rechunk_size > 0 and self.text_rechunk_force:
-                src_dataset = src_dataset.map(rechunk_text, batched=True, 
-                                            batch_size=self.text_rechunk_size*2,
-                                            num_proc=num_cpus)
-
-            # Check if the dataset does not have a test split
-            # and if so, perform the split
-            if 'test' not in src_dataset.keys():
-                src_dataset = src_dataset['train'].train_test_split(test_size=self.test_split,shuffle=self.test_split_shuffle)
-            
-            # Save the dataset to disk
-            src_dataset.save_to_disk(self.data_path)
-    
-    # Called once for every process in DDP
-    def setup(self, stage):
-        # Load the dataset as per normal 
-        self._loaded_dataset = load_from_disk(self.data_path).with_format('torch')
-
-    # Return the train dataloader
-    def train_dataloader(self):
-        return DataLoader(self._loaded_dataset['train'], num_workers=num_cpus)
-    
-    # Return the validation dataloader
-    def val_dataloader(self):
-        return DataLoader(self._loaded_dataset['test'], num_workers=num_cpus)
+    # Load the dataset as per normal 
+    dataset = load_from_disk(data_path).with_format('torch')
+    return LightningDataModule.from_datasets(dataset['train'], dataset['test'], num_workers=num_cpus)
