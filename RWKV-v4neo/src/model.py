@@ -541,7 +541,7 @@ class RWKV(L.LightningModule):
     # This allow us to avoid disabling the "automatic_optimization" flag
     #
     # Which would have been required to do "segmented learning", or "Truncated Backpropagation Through Time"
-    # we would need to implement manual optimization as per
+    # where we would need to implement manual optimization as per
     # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
     #
     # Otherwise an error will be thrown if we call `self.manual_backward`
@@ -550,11 +550,12 @@ class RWKV(L.LightningModule):
     # of several features that were handled by the automatic optimization.
     # - accumulate_grad_batches
     # - gradient_clip_val
+    # - logging behaviour
+    # - distributed training co-ordination
     # - (And probably other features that I am not aware of)
     #
-    # So this is a hacky work around, we only disable automatic_optimization temporarily
-    # and perform the backward pass manually, and then re-enable the automatic optimization
-    #
+    # So this is a hacky work around, to avoid reimplementing all of the above.
+    # 
     # From the current code implementatiion, it seem like this is blocked only by 
     # automatic_optimization flag - and has no adverse side effect otherwise
     # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
