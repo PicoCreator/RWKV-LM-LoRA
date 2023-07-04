@@ -530,6 +530,45 @@ class RWKV(L.LightningModule):
 
         return x, new_states.shift_states, new_states.wkv_states
 
+    #
+    # Custom overwrite of manual_backwards operation, to skip the "manual_backwards"
+    # safety check, so we can perform manual backward operation step, while using
+    # the default trainer loop. This is modified from the original code found here:
+    # https://github.com/Lightning-AI/lightning/blob/37c244f94be365496def82870b22c2faf0ab889e/src/lightning/pytorch/core/module.py#L999
+    #
+    # ---
+    # 
+    # This allow us to avoid disabling the "automatic_optimization" flag
+    #
+    # Which would have been required to do "segmented learning", or "Truncated Backpropagation Through Time"
+    # we would need to implement manual optimization as per
+    # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+    #
+    # Otherwise an error will be thrown if we call `self.manual_backward`
+    #
+    # However this would mean that we would need to do a full reimplementation
+    # of several features that were handled by the automatic optimization.
+    # - accumulate_grad_batches
+    # - gradient_clip_val
+    # - (And probably other features that I am not aware of)
+    #
+    # So this is a hacky work around, we only disable automatic_optimization temporarily
+    # and perform the backward pass manually, and then re-enable the automatic optimization
+    #
+    # From the current code implementatiion, it seem like this is blocked only by 
+    # automatic_optimization flag - and has no adverse side effect otherwise
+    # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
+    #
+    # If anyone have a better idea, let me know
+    # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
+    #
+    def manual_backward(self, loss: torch.Tensor, *args, **kwargs):
+        if self._fabric:
+            self._fabric.backward(loss, *args, **kwargs)
+        else:
+            # self._verify_is_manual_optimization("manual_backward")
+            self.trainer.strategy.backward(loss, None, *args, **kwargs)
+
     def compute_loss(self, batch, batch_idx, is_training_run: bool):
         seq = batch['input_ids']
         assert isinstance(seq, torch.Tensor) and seq.ndim == 2
@@ -617,29 +656,6 @@ class RWKV(L.LightningModule):
         #
         if do_tbptt_learning:
 
-            # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
-            # we would need to implement manual optimization as per
-            # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-            #
-            # Otherwise an error will be thrown if we call `self.manual_backward`
-            #
-            # However this would mean that we would need to do a full reimplementation
-            # of several features that were handled by the automatic optimization.
-            # - accumulate_grad_batches
-            # - gradient_clip_val
-            # - (And probably other features that I am not aware of)
-            #
-            # So this is a hacky work around, we only disable automatic_optimization temporarily
-            # and perform the backward pass manually, and then re-enable the automatic optimization
-            #
-            # From the current code implementatiion, it seem like this is blocked only by 
-            # automatic_optimization flag - and has no adverse side effect otherwise
-            # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
-            #
-            # If anyone have a better idea, let me know
-            # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
-            self.automatic_optimization = False
-            
             # Get the optimizer
             optimizer = self.optimizers()
             
@@ -697,11 +713,6 @@ class RWKV(L.LightningModule):
                 # GC collect unused memory
                 gc.collect()
                 # torch.cuda.empty_cache()
-
-            # Re-enable the automatic optimization
-            # and handle the last loss backward pass as normal
-            self.automatic_optimization = True
-
         else:
 
             # Normal operations without TBPTT
