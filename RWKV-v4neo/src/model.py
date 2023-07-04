@@ -262,8 +262,9 @@ class RWKV(L.LightningModule):
                  beta2: float = 0.99,
                  adam_eps: float = 1.0e-08,
                  weight_decay: float = 0.01,
-                 tbptt_learning: bool = True,
-                 tbptt_learning_range: int = -1,
+                 bptt_learning: bool = True,
+                 bptt_learning_range: int = -1,
+                 bptt_truncated_learning: bool = False,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -287,8 +288,9 @@ class RWKV(L.LightningModule):
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
-        self.tbptt_learning = tbptt_learning
-        self.tbptt_learning_range = tbptt_learning_range
+        self.bptt_learning = bptt_learning
+        self.bptt_learning_range = bptt_learning_range
+        self.bptt_truncated_learning = bptt_truncated_learning
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -319,9 +321,9 @@ class RWKV(L.LightningModule):
         self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
-        if self.tbptt_learning == False:
+        if self.bptt_learning == False:
             if self.deepspeed_stage >= 2 or self.deepspeed_offload:
-                print("[WARNING]: it is highly recommended to enable tbptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
+                print("[WARNING]: it is highly recommended to enable bptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
 
         if self.layerwise_lr:
             lr_1x = set()
@@ -501,7 +503,7 @@ class RWKV(L.LightningModule):
         if isinstance(strategy, DeepSpeedStrategy):
             cfg = strategy.config["zero_optimization"]
             return "stage" in cfg
-        return 1
+        return -1
 
     def forward(self, idx: torch.Tensor, last_shift_states: torch.Tensor,
                 last_wkv_states: torch.Tensor):
@@ -527,6 +529,46 @@ class RWKV(L.LightningModule):
         x = self.head(x)
 
         return x, new_states.shift_states, new_states.wkv_states
+
+    #
+    # Custom overwrite of manual_backwards operation, to skip the "manual_backwards"
+    # safety check, so we can perform manual backward operation step, while using
+    # the default trainer loop. This is modified from the original code found here:
+    # https://github.com/Lightning-AI/lightning/blob/37c244f94be365496def82870b22c2faf0ab889e/src/lightning/pytorch/core/module.py#L999
+    #
+    # ---
+    # 
+    # This allow us to avoid disabling the "automatic_optimization" flag
+    #
+    # Which would have been required to do "segmented learning", or "Truncated Backpropagation Through Time"
+    # where we would need to implement manual optimization as per
+    # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
+    #
+    # Otherwise an error will be thrown if we call `self.manual_backward`
+    #
+    # However this would mean that we would need to do a full reimplementation
+    # of several features that were handled by the automatic optimization.
+    # - accumulate_grad_batches
+    # - gradient_clip_val
+    # - logging behaviour
+    # - distributed training co-ordination
+    # - (And probably other features that I am not aware of)
+    #
+    # So this is a hacky work around, to avoid reimplementing all of the above.
+    # 
+    # From the current code implementatiion, it seem like this is blocked only by 
+    # automatic_optimization flag - and has no adverse side effect otherwise
+    # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
+    #
+    # If anyone have a better idea, let me know
+    # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
+    #
+    def manual_backward(self, loss: torch.Tensor, *args, **kwargs):
+        if self._fabric:
+            self._fabric.backward(loss, *args, **kwargs)
+        else:
+            # self._verify_is_manual_optimization("manual_backward")
+            self.trainer.strategy.backward(loss, None, *args, **kwargs)
 
     def compute_loss(self, batch, batch_idx, is_training_run: bool):
         seq = batch['input_ids']
@@ -557,7 +599,7 @@ class RWKV(L.LightningModule):
                     break
                 prev_step = step
                 
-        do_tbptt_learning = self.tbptt_learning and is_training_run
+        do_bptt_learning = self.bptt_learning and is_training_run
         idx, targets = seq[:, :-1], seq[:, 1:]
 
         B, T = idx.shape
@@ -613,30 +655,10 @@ class RWKV(L.LightningModule):
         # https://github.com/microsoft/DeepSpeed/pull/677
         # https://github.com/EleutherAI/gpt-neox/issues/62#issuecomment-766366413
         #
-        if do_tbptt_learning:
+        if do_bptt_learning:
 
-            # Currently to do "segmented learning", or "Truncated Backpropagation Through Time"
-            # we would need to implement manual optimization as per
-            # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
-            #
-            # Otherwise an error will be thrown if we call `self.manual_backward`
-            #
-            # However this would mean that we would need to do a full reimplementation
-            # of several features that were handled by the automatic optimization.
-            # - accumulate_grad_batches
-            # - gradient_clip_val
-            # - (And probably other features that I am not aware of)
-            #
-            # So this is a hacky work around, we only disable automatic_optimization temporarily
-            # and perform the backward pass manually, and then re-enable the automatic optimization
-            #
-            # From the current code implementatiion, it seem like this is blocked only by 
-            # automatic_optimization flag - and has no adverse side effect otherwise
-            # https://lightning.ai/docs/pytorch/stable/_modules/lightning/pytorch/core/module.html#LightningModule.manual_backward
-            #
-            # If anyone have a better idea, let me know
-            # (have experimented with, reimplementing the above, but it is not trivial, unfortunately)
-            self.automatic_optimization = False
+            # Get the optimizer
+            optimizer = self.optimizers()
             
             # We get the average segment size, instead of ctx length size.
             # this helps ensure that the segment cutoffs do not make the last segment too small, 
@@ -646,42 +668,52 @@ class RWKV(L.LightningModule):
             segment_size = min(math.ceil(T / segment_count), self.ctx_len)
 
             # Segmented learning range
-            if self.tbptt_learning_range > 0:
-                first_learning_segment = segment_count - self.tbptt_learning_range;
+            if self.bptt_learning_range > 0:
+                first_learning_segment = segment_count - self.bptt_learning_range;
             else:
                 first_learning_segment = 0;
 
+            # Flag for first optimizer run
+            first_manual_backward = True
+
             for i in range(segment_count):
-                # Segmented learning, detaches the graph for each segment
+                # Apply state truncation, if truncated learning is enabled
+                if self.bptt_truncated_learning:
+                    prv_shift_states = states.shift_states.clone().detach().requires_grad_(False)
+                    prv_wkv_states = states.wkv_states.clone().detach().requires_grad_(False)
+                else:
+                    prv_shift_states = states.shift_states
+                    prv_wkv_states = states.wkv_states
+                
+                # Segmented learning, applies the forward/pass over each chunk seperately
                 segment_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     idx[:, i * segment_size:(i + 1) * segment_size],
                     targets[:, i * segment_size:(i + 1) * segment_size],
                     seq_mask[:, i * segment_size:(i + 1) * segment_size],
                     torch.tensor(0, dtype=self.emb.weight.dtype).requires_grad_(True),
-                    states.shift_states.clone().detach().requires_grad_(False),
-                    states.wkv_states.clone().detach().requires_grad_(False),
+                    prv_shift_states,
+                    prv_wkv_states,
                     steps,
                 )
                 states = BlockStateList(new_shift_states, new_wkv_states)
 
                 # Compute the backward pass for the segment
-                if i < segment_count - 1:
-                    if i >= first_learning_segment:
-                        self.manual_backward(segment_loss)
-                    total_loss = total_loss + segment_loss.clone().detach()
-                else:
-                    # For the last segment, we do not perform a backward pass, 
-                    # and instead return it for the default backward pass to handle
-                    total_loss = total_loss + segment_loss
+                if i >= first_learning_segment:
+                    if first_manual_backward:
+                        self.manual_backward(segment_loss, optimizer)
+                        first_manual_backward = False
+                    else:
+                        # Undocumented multiple backwar pass support
+                        # https://discord.com/channels/992359628979568762/1123248764132524242/1125374974597795920
+                        self.manual_backward(segment_loss, optimizer, retain_graph=True)
+                
+                # Accumulate the total loss, since there is nothing to backprop here
+                # its respective "backward pass" should be a no-op
+                total_loss = total_loss + segment_loss.clone().detach().requires_grad_(False)
 
                 # GC collect unused memory
                 gc.collect()
                 # torch.cuda.empty_cache()
-
-            # Re-enable the automatic optimization
-            # and handle the last loss backward pass as normal
-            self.automatic_optimization = True
-
         else:
 
             # Normal operations without TBPTT
@@ -728,6 +760,12 @@ class RWKV(L.LightningModule):
     def training_step(self, batch, batch_idx):
         total_loss = self.compute_loss(batch, batch_idx, True)
         self.log('train/loss', total_loss, prog_bar=True)
+        
+        # The following barrier is required to syncronize the trainig step across all GPUs before
+        # the optimizer step is performed for each batch. Otherwise a "hanged state" can occur.
+        if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
+            self.trainer.getFabric().barrier()
+
         return total_loss
 
     def validation_step(self, batch, batch_idx):
