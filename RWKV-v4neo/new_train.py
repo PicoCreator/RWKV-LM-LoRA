@@ -7,7 +7,7 @@ from src.trainer import RWKVLightningTrainer
 def cli_main():
     LightningCLI(
         RWKV, get_data_module, 
-        save_config_kwargs={"overwrite": True}
+        save_config_kwargs={"overwrite": True},
         trainer_class=RWKVLightningTrainer
     )
 
