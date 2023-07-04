@@ -324,7 +324,9 @@ class RWKV(L.LightningModule):
         if self.bptt_learning == False:
             if self.deepspeed_stage >= 2 or self.deepspeed_offload:
                 print("[WARNING]: it is highly recommended to enable bptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
-
+        else:
+            if self.trainer.num_devices > 1 and (self.bptt_learning_range <= -1 or self.bptt_learning_range > 1):
+                raise NotImplementedError("bptt_learning_range must be limited to 1 in multi-gpu training, due to existing issues where `backprop(retain_graph=True)` where it hangs in multi-gpu training")
         if self.layerwise_lr:
             lr_1x = set()
             lr_2x = set()
@@ -673,9 +675,6 @@ class RWKV(L.LightningModule):
             else:
                 first_learning_segment = 0;
 
-            # Flag for first optimizer run
-            first_manual_backward = True
-
             for i in range(segment_count):
                 # Apply state truncation, if truncated learning is enabled
                 if self.bptt_truncated_learning:
@@ -699,11 +698,11 @@ class RWKV(L.LightningModule):
 
                 # Compute the backward pass for the segment
                 if i >= first_learning_segment:
-                    if first_manual_backward:
+                    if i == segment_count-1:
+                        # This is the last pass, we can drop the graph after this
                         self.manual_backward(segment_loss, optimizer)
-                        first_manual_backward = False
                     else:
-                        # Undocumented multiple backwar pass support
+                        # Undocumented multiple backward pass support
                         # https://discord.com/channels/992359628979568762/1123248764132524242/1125374974597795920
                         self.manual_backward(segment_loss, optimizer, retain_graph=True)
                 
@@ -761,10 +760,12 @@ class RWKV(L.LightningModule):
         total_loss = self.compute_loss(batch, batch_idx, True)
         self.log('train/loss', total_loss, prog_bar=True)
         
-        # The following barrier is required to syncronize the trainig step across all GPUs before
-        # the optimizer step is performed for each batch. Otherwise a "hanged state" can occur.
-        if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-            self.trainer.getFabric().barrier()
+        # # The following barrier is required to syncronize the trainig step across all GPUs before
+        # # the optimizer step is performed for each batch. Otherwise a "hanged state" can occur.
+        # #
+        # # This is suppose to help with multi-gpu training (did not work)
+        # if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
+        #     self.trainer.getFabric().barrier()
 
         return total_loss
 
