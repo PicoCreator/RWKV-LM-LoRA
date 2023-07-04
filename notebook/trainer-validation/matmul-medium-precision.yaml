@@ -235,12 +235,12 @@ model:
   # This is not 1:1 equivalent to the same training process with required vram
   # as the training process is split into multiple segments, part by part.
   # with limited learnings from the previous segment.
-  tbptt_learning: false
+  bptt_learning: false
 
   # Segmented range to performing backprop learning on
   # 1 means to apply only for the last segment
   # -1 means to apply for all segments
-  tbptt_learning_range: -1
+  bptt_learning_range: -1
 
   # various other settings you probably should leave alone
   grad_cp: true
