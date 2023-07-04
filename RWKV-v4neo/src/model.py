@@ -262,9 +262,9 @@ class RWKV(L.LightningModule):
                  beta2: float = 0.99,
                  adam_eps: float = 1.0e-08,
                  weight_decay: float = 0.01,
-                 tbptt_learning: bool = True,
-                 tbptt_learning_range: int = -1,
-                 tbptt_truncated_learning: bool = False,
+                 bptt_learning: bool = True,
+                 bptt_learning_range: int = -1,
+                 bptt_truncated_learning: bool = False,
                  layerwise_lr: bool = True,
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
@@ -288,9 +288,9 @@ class RWKV(L.LightningModule):
         self.beta2 = beta2
         self.weight_decay = weight_decay
         self.adam_eps = adam_eps
-        self.tbptt_learning = tbptt_learning
-        self.tbptt_learning_range = tbptt_learning_range
-        self.tbptt_truncated_learning = tbptt_truncated_learning
+        self.bptt_learning = bptt_learning
+        self.bptt_learning_range = bptt_learning_range
+        self.bptt_truncated_learning = bptt_truncated_learning
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -321,9 +321,9 @@ class RWKV(L.LightningModule):
         self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
-        if self.tbptt_learning == False:
+        if self.bptt_learning == False:
             if self.deepspeed_stage >= 2 or self.deepspeed_offload:
-                print("[WARNING]: it is highly recommended to enable tbptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
+                print("[WARNING]: it is highly recommended to enable bptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
 
         if self.layerwise_lr:
             lr_1x = set()
@@ -503,7 +503,7 @@ class RWKV(L.LightningModule):
         if isinstance(strategy, DeepSpeedStrategy):
             cfg = strategy.config["zero_optimization"]
             return "stage" in cfg
-        return 1
+        return -1
 
     def forward(self, idx: torch.Tensor, last_shift_states: torch.Tensor,
                 last_wkv_states: torch.Tensor):
@@ -598,7 +598,7 @@ class RWKV(L.LightningModule):
                     break
                 prev_step = step
                 
-        do_tbptt_learning = self.tbptt_learning and is_training_run
+        do_bptt_learning = self.bptt_learning and is_training_run
         idx, targets = seq[:, :-1], seq[:, 1:]
 
         B, T = idx.shape
@@ -654,7 +654,7 @@ class RWKV(L.LightningModule):
         # https://github.com/microsoft/DeepSpeed/pull/677
         # https://github.com/EleutherAI/gpt-neox/issues/62#issuecomment-766366413
         #
-        if do_tbptt_learning:
+        if do_bptt_learning:
 
             # Get the optimizer
             optimizer = self.optimizers()
@@ -667,8 +667,8 @@ class RWKV(L.LightningModule):
             segment_size = min(math.ceil(T / segment_count), self.ctx_len)
 
             # Segmented learning range
-            if self.tbptt_learning_range > 0:
-                first_learning_segment = segment_count - self.tbptt_learning_range;
+            if self.bptt_learning_range > 0:
+                first_learning_segment = segment_count - self.bptt_learning_range;
             else:
                 first_learning_segment = 0;
 
@@ -677,7 +677,7 @@ class RWKV(L.LightningModule):
 
             for i in range(segment_count):
                 # Apply state truncation, if truncated learning is enabled
-                if self.tbptt_truncated_learning:
+                if self.bptt_truncated_learning:
                     prv_shift_states = states.shift_states.clone().detach().requires_grad_(False)
                     prv_wkv_states = states.wkv_states.clone().detach().requires_grad_(False)
                 else:
