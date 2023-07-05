@@ -192,14 +192,14 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 8192
+  ctx_len: 4096
   # Data samples would be cut down to the respective max ctx_len_cutoffs
   # values if its larger then ctx_len. If the data sample is larger then
   # the largest len_cutoff, the remaining data will be discarded
-  ctx_len_cutoffs: [8192, 16384, 32768, 65536]
+  ctx_len_cutoffs: [4096, 8192, 16384, 32768, 65536]
   # Experimental settings, number of tokens to skip in the data sample
   # prefix, for the respective cutoff length. Used to speed up the process
-  ctx_len_warmup_steps: [0, 0, 0, 0]
+  ctx_len_warmup_steps: [0, 0, 0, 0, 0]
 
   # Learning rate of the training process
   # ---
