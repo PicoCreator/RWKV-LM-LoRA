@@ -24,7 +24,7 @@ trainer:
   # For more details see:
   # https://lightning.ai/docs/pytorch/stable/advanced/model_parallel.html#deepspeed-zero-stage-2
   #
-  strategy: deepspeed_stage_2
+  strategy: deepspeed_stage_2_offload
 
   # Floating point precision for the model, because RWKV is built FOR bf16
   # you should pretty much never change this setting
@@ -35,7 +35,7 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 enwiki_100k foundation'
+      name: 'Echo-A-1B5 enwiki_100k foundation (1xGPU, bs=12, ctx=4092, ds2offload)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
