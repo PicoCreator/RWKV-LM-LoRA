@@ -20,6 +20,7 @@ public:
     assert(raw_k.dim() == 3);
     const auto [B, T, C] =
         std::tuple(raw_k.size(0), raw_k.size(1), raw_k.size(2));
+    assert(T >= Tmin);
     assert(T <= Tmax);
     assert(raw_w.dim() == 1 && raw_w.size(0) == C);
     assert(raw_u.dim() == 1 && raw_u.size(0) == C);

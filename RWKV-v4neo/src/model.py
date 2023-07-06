@@ -300,15 +300,17 @@ class RWKV(L.LightningModule):
 
         self.emb = nn.Embedding(vocab_size, n_embd)
 
+        cuda_ctx_max = self.ctx_len
+        cuda_ctx_min = self.ctx_len
         load(name=f"wkv_{self.ctx_len}_bf16",
              sources=["cuda/wkv_op_bf16.cpp", "cuda/wkv_cuda_bf16.cu"],
              verbose=True,
-             extra_cflags=["-std=c++17", "-O3", f"-DTmax={self.ctx_len}"],
+             extra_cflags=["-std=c++17", "-O3", f"-DTmax={cuda_ctx_max}", f"-DTmin={cuda_ctx_min}"],
              extra_cuda_cflags=[
-                 "-t 4", "-std=c++17", "-res-usage", "--maxrregcount 64",
+                 "-t 4", "-std=c++17", "-res-usage", "--maxrregcount 60",
                  "--use_fast_math", "-O3", "-Xptxas -O3",
                  "--default-stream per-thread", "-arch=native",
-                 "--extra-device-vectorization", f"-DTmax={self.ctx_len}"
+                 "--extra-device-vectorization", f"-DTmax={cuda_ctx_max}", f"-DTmin={cuda_ctx_min}"
              ],
              is_python_module=False)
 
