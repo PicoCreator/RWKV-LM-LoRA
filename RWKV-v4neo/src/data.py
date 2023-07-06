@@ -225,7 +225,7 @@ def prepare_data_static(**kargs):
             for i in range(total_samples):
                 # Calculate the start and end of the sample
                 start = i * kargs["text_rechunk_size"]
-                end = start + kargs["text_rechunk_size"]
+                end = start + kargs["text_rechunk_size"] + 1
 
                 # Push the sample to the output arrays
                 out_input_ids.append(full_input_ids[start:end])
