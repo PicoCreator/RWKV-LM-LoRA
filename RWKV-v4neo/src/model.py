@@ -305,7 +305,7 @@ class RWKV(L.LightningModule):
              verbose=True,
              extra_cflags=["-std=c++17", "-O3", f"-DTmax={self.ctx_len}"],
              extra_cuda_cflags=[
-                 "-t 4", "-std=c++17", "-res-usage", "--maxrregcount 60",
+                 "-t 4", "-std=c++17", "-res-usage", "--maxrregcount 64",
                  "--use_fast_math", "-O3", "-Xptxas -O3",
                  "--default-stream per-thread", "-arch=native",
                  "--extra-device-vectorization", f"-DTmax={self.ctx_len}"
