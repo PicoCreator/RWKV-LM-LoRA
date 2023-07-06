@@ -3,7 +3,7 @@ seed_everything: 3941088705
 trainer:
   # Configure the number of GPU, avaliable on your machine
   accelerator: gpu
-  devices: auto
+  devices: 1
   num_nodes: 1
 
   #
@@ -35,7 +35,7 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 enwiki_100k foundation (1xGPU, bs=12, ctx=4092, ds2offload)'
+      name: 'Echo-A-1B5 enwiki_100k foundation (1xGPU, bs=12, ctx=4096)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
