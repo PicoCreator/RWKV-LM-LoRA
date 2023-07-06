@@ -300,17 +300,14 @@ class RWKV(L.LightningModule):
 
         self.emb = nn.Embedding(vocab_size, n_embd)
 
-        cuda_ctx_max = self.ctx_len
-        cuda_ctx_min = self.ctx_len
         load(name=f"wkv_{self.ctx_len}_bf16",
              sources=["cuda/wkv_op_bf16.cpp", "cuda/wkv_cuda_bf16.cu"],
              verbose=True,
-             extra_cflags=["-std=c++17", "-O3", f"-DTmax={cuda_ctx_max}", f"-DTmin={cuda_ctx_min}"],
+             extra_cflags=["-std=c++17", "-O3", f"-DTmax={self.ctx_len}"],
              extra_cuda_cflags=[
                  "-t 4", "-std=c++17", "-res-usage", "--maxrregcount 60",
                  "--use_fast_math", "-O3", "-Xptxas -O3",
-                 "--default-stream per-thread", "-arch=native",
-                 "--extra-device-vectorization", f"-DTmax={cuda_ctx_max}", f"-DTmin={cuda_ctx_min}"
+                 "--extra-device-vectorization", f"-DTmax={self.ctx_len}"
              ],
              is_python_module=False)
 
@@ -328,8 +325,13 @@ class RWKV(L.LightningModule):
             if self.deepspeed_stage >= 2 or self.deepspeed_offload:
                 print("[WARNING]: it is highly recommended to enable bptt_learning when used to deepspeed 2/3/offloading, otherwise an exception will occur when training with dataset records, larger then the configured context length ({self.ctx_len})")
         else:
-            if self.trainer.num_devices > 1 and (self.bptt_learning_range <= -1 or self.bptt_learning_range > 1):
-                raise NotImplementedError("bptt_learning_range must be limited to 1 in multi-gpu training, due to existing issues where `backprop(retain_graph=True)` where it hangs in multi-gpu training")
+            if self.trainer.num_devices > 1:
+                if self.bptt_learning_range <= 0:
+                    print("[WARNING]: unlimited bptt_learning_range across multiple GPU's has a performance penalty with datasets of mixed sizes due to its constant need to keep all GPU's in sync (consider using bptt_learning_range=1 instead)")
+                if self.bptt_learning_range > 1:
+                    # Temporary error, till better sync logic is done for mixed document sizes
+                    # (lazy to support this right now, since i have no idea if anyone has a use for it)
+                    raise NotImplementedError("bptt_learning_range > 1 is not supported yet")
         if self.layerwise_lr:
             lr_1x = set()
             lr_2x = set()
@@ -417,6 +419,7 @@ class RWKV(L.LightningModule):
                 'optimizer': optimizer,
                 'lr_scheduler': lr_scheduler,
             }
+
         else:
             # Skip the lr_scheduler process if lr_init and lr_final are the same
             if starting_lr == ending_lr:
@@ -485,11 +488,12 @@ class RWKV(L.LightningModule):
 
         # Get the train_dataloader
         train_dataloader = self.trainer.train_dataloader
-        if( train_dataloader is None ):
+        if train_dataloader is None:
             train_dataloader = self.trainer.fit_loop._data_source.dataloader()
 
         # Max epoch is not set, use the train_dataloader
         dataset_size = len(train_dataloader)
+
         num_devices = max(1, self.trainer.num_devices)
         num_steps = dataset_size // (self.trainer.accumulate_grad_batches * num_devices)
         return num_steps
@@ -545,7 +549,7 @@ class RWKV(L.LightningModule):
     # 
     # This allow us to avoid disabling the "automatic_optimization" flag
     #
-    # Which would have been required to do "segmented learning", or "Truncated Backpropagation Through Time"
+    # Which would have been required to do "segmented learning", or "Backpropagation Through Time"
     # where we would need to implement manual optimization as per
     # https://lightning.ai/docs/pytorch/stable/model/manual_optimization.html
     #
@@ -639,7 +643,7 @@ class RWKV(L.LightningModule):
         segment_count = math.ceil(T / self.ctx_len)
 
         #
-        # TBPTT learning, we split the sequence into segments
+        # BPTT learning, we split the sequence into segments
         # and perform a backward pass for each segment, on its own.
         #
         # Allowing us to perform backpropagation across context sizes much larger
@@ -662,30 +666,58 @@ class RWKV(L.LightningModule):
         #
         if do_bptt_learning:
 
-            # Get the optimizer
-            optimizer = self.optimizers()
-
-            # Get the gradient accumulation steps size
             gradient_accumulation_steps = max(1, self.trainer.accumulate_grad_batches)
-
-            # Get the current device
+            optimizer = self.optimizers()
             cur_device = self.device
             
-            # We get the average segment size, instead of ctx length size.
-            # this helps ensure that the segment cutoffs do not make the last segment too small, 
+            # We use the average segment size, instead of ctx length size.
+            # this helps ensure that the segment cutoffs do not make the last segment too small.
+            # (eg, the last chunk having only 1 token)
+            #
             # it also helps ensure the segment cutoff points are more varied, across mixed dataset sizes
-            # to avoid potentially undesired training behaviour at fixed cutoff points
+            # and avoid potentially undesired training behaviour at fixed cutoff points
             # (this only applies for segmented learning)
             segment_size = min(math.ceil(T / segment_count), self.ctx_len)
 
-            # Segmented learning range
+            # We compute when we start the segmented learning process
             if self.bptt_learning_range > 0:
                 first_learning_segment = segment_count - self.bptt_learning_range;
             else:
                 first_learning_segment = 0;
 
-            for i in range(segment_count):
+            # Dummy 2D tenros of shape [1,1], are used to do "dummy checkpoint/forward/backprop" to keep everything in sync
+            dummy_2d_zero = torch.tensor([[0]], dtype=torch.long, device=cur_device)
+
+            # Get the max segment count across all GPUs, in the current batch, which is used to keep all devices are in sync
+            # Once a thread has completed all its segments, it will do dummy checkpoint/forward/backprop with one token,
+            # and stay in sync with the thread that are still working on their segments
+            #
+            # This is used to work around an undocumented behaviour for either lightning / deepspeed loss.backward multi-gpu handling
+            # where the `self.manual_backward()` / `loss.backward()` call will block / freeze / hang when being too "out of sync"
+            #
+            # This can be viewed as a form of `fabric.barrier()` which is invoked implicitly by each `self.manual_backward()` call
+            # except that it isn't exactly a `fabric.barrier()` - because it does not block immediately and instead blocks in 
+            # the next `self.manual_backward()` call if the previous ones are too far out of sync. 
+            # (its confusing, but makes sense for efficency)
+            #
+            # Additionally because the "code line position" and params actually matter for the 'barrier' code effect,
+            # we cant work around this issue by doing dummy `self.manual_backward()` calls, in another if/else branch or loop
+            #
+            # Combined, this makes this issue very hard to trace and debug, as it will manifest itself as randomly "freezing"
+            # when out of sync during `self.manual_backward()` calls. Without the current work around put in place
+            #
+            # We only do this, if we are doing bptt learning on more then 1 segment, and gpu count > 1
+            # otherwise we just use the segment count as it is
+            if self.trainer.num_devices > 1 and (self.bptt_learning_range > 1 or self.bptt_learning_range <= 0):
+                shared_segment_count = self.trainer.getFabric().all_reduce(segment_count, reduce_op="max").item()
+            else:
+                shared_segment_count = segment_count
+
+            # Lets go through all the segments (including dummy ones)
+            for i in range(shared_segment_count):
                 # Apply state truncation, if truncated learning is enabled
+                # this limits the backprop process, reduces loss learning rate, 
+                # but save vram across extreamly large backpropagation steps
                 if self.bptt_truncated_learning:
                     prv_shift_states = states.shift_states.clone().detach().requires_grad_(False)
                     prv_wkv_states = states.wkv_states.clone().detach().requires_grad_(False)
@@ -693,11 +725,22 @@ class RWKV(L.LightningModule):
                     prv_shift_states = states.shift_states
                     prv_wkv_states = states.wkv_states
                 
+                # We use a dummy masked token 0, to do additional dummy checkpoint/forward/backprop when needed
+                # for each additional call after the current "segment_count" max
+                if i <= segment_count - 1:
+                    cur_idx = idx[:, i * segment_size:(i + 1) * segment_size]
+                    cur_tar = targets[:, i * segment_size:(i + 1) * segment_size]
+                    cur_msk = seq_mask[:, i * segment_size:(i + 1) * segment_size]
+                else:
+                    cur_idx = dummy_2d_zero
+                    cur_tar = dummy_2d_zero
+                    cur_msk = dummy_2d_zero
+
                 # Segmented learning, applies the forward/pass over each chunk seperately
                 segment_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
-                    idx[:, i * segment_size:(i + 1) * segment_size],
-                    targets[:, i * segment_size:(i + 1) * segment_size],
-                    seq_mask[:, i * segment_size:(i + 1) * segment_size],
+                    cur_idx,
+                    cur_tar,
+                    cur_msk,
                     torch.tensor(0, dtype=self.emb.weight.dtype, device=cur_device).requires_grad_(True),
                     prv_shift_states,
                     prv_wkv_states,
@@ -713,24 +756,27 @@ class RWKV(L.LightningModule):
                     learning_loss = segment_loss / gradient_accumulation_steps
 
                     # Perform the backward pass accordingly
-                    if i < segment_count-1:
+                    if i < shared_segment_count-1:
                         # Undocumented multiple backward pass support
                         # https://github.com/Lightning-AI/lightning/blob/678f642808c54e4c490caee4df5d357301c976bb/tests/trainer/optimization/test_manual_optimization.py#L251
                         self.manual_backward(learning_loss, optimizer, retain_graph=True)
+
+                        # Accumulate without gradient, as we already did the backward pass
+                        total_loss = total_loss + segment_loss.clone().detach().requires_grad_(False)
                     else:
-                        # This is the last pass, we can drop the graph after this
-                        self.manual_backward(learning_loss, optimizer)
-                
-                # Accumulate the total loss, since there is nothing to backprop here
-                # its respective "backward pass" should be a no-op
-                total_loss = total_loss + segment_loss.clone().detach().requires_grad_(False)
+                        # This is the last pass, we let the default pytorch lightning handle the backward pass
+                        # and return the segment loss as part of the total loss
+                        total_loss = total_loss + segment_loss
+                else:
+                    # Even if its not the segments we use for backward pass, we need to accumulate the loss
+                    total_loss = total_loss + segment_loss.clone().detach().requires_grad_(False)
 
                 # GC collect unused memory
                 gc.collect()
                 # torch.cuda.empty_cache()
         else:
 
-            # Normal operations without TBPTT
+            # Normal operations without BPTT
             segment_size = self.ctx_len
             for i in range(segment_count):
                 if i < segment_count-1:
@@ -761,8 +807,12 @@ class RWKV(L.LightningModule):
 
         # Wandb logging only, if an active run exists
         if wandb.run is not None:
+            global_rank = self.global_rank
+            global_device_count = self.trainer.num_devices * self.trainer.num_nodes
             wandb.log({
-                'substep': batch_idx, 
+                'substep': batch_idx * global_device_count + global_rank,
+                'batchidx': batch_idx,
+                'global_rank': global_rank, 
                 'real_ctx_len': T, 
                 'train/loss': total_loss,
                 'trainer/global_step':self.global_step,
@@ -773,16 +823,8 @@ class RWKV(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         total_loss = self.compute_loss(batch, batch_idx, True)
-        print("")
-        self.log('train/loss', total_loss, prog_bar=False)
+        self.log('train/loss', total_loss, prog_bar=True)
         
-        # # The following barrier is required to syncronize the trainig step across all GPUs before
-        # # the optimizer step is performed for each batch. Otherwise a "hanged state" can occur.
-        # #
-        # # This is suppose to help with multi-gpu training (did not work)
-        # if (batch_idx + 1) % self.trainer.accumulate_grad_batches == 0:
-        #     self.trainer.getFabric().barrier()
-
         return total_loss
 
     def validation_step(self, batch, batch_idx):
