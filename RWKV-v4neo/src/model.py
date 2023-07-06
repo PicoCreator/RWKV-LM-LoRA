@@ -770,7 +770,8 @@ class RWKV(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         total_loss = self.compute_loss(batch, batch_idx, True)
-        self.log('train/loss', total_loss, prog_bar=True)
+        print("")
+        self.log('train/loss', total_loss, prog_bar=False)
         
         # # The following barrier is required to syncronize the trainig step across all GPUs before
         # # the optimizer step is performed for each batch. Otherwise a "hanged state" can occur.
