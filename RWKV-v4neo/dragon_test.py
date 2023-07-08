@@ -14,12 +14,12 @@ if len(sys.argv) < 2:
     sys.exit(1)
 MODEL_PATH=sys.argv[1]
 
-# If model strategy is not specified, use 'cuda fp16' as default
+# If model strategy is not specified, use 'cpu fp32' as default
 MODEL_STRATEGY=None
 if len(sys.argv) >= 3:
     MODEL_STRATEGY=sys.argv[2]
 if MODEL_STRATEGY is None:
-    MODEL_STRATEGY = 'cuda fp16'
+    MODEL_STRATEGY = 'cpu fp32'
 
 # set these before import RWKV
 os.environ['RWKV_JIT_ON'] = '1'

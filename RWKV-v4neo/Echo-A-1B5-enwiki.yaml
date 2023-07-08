@@ -35,12 +35,10 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-A-1B5 enwiki_100k foundation (1xGPU, bs=12, ctx=4096)'
+      name: 'Echo-A-1B5 enwiki_100k foundation (1xGPU, bs=12, train-ctx=4096)'
       # name: 'Echo-A-1B5 Foundation'
       project: 'RWKV-Memory-Experiment'
       tags: ['RWKV', 'memory-exp']
-      # id: 'aenwiki01'
-      # id: 'aenwiki11'
       id: null
       save_dir: .
       version: null
@@ -324,6 +322,5 @@ data:
 # Path to the current checkpoint to continue training from
 # Enable this to the last checkpoint after the first run 
 # (if it crash and you want to resume)
-# ckpt_path: ../checkpoint/Echo-A-1B5-enwiki/epoch=1-step=20.ckpt
+# ckpt_path: ../checkpoint/Echo-A-1B5-enwiki/epoch=0-step=2500.ckpt
 ckpt_path: null
-# ckpt_path: /home/picocreator/rwkv-proj/memory-experiment-RWKV/checkpoint/Echo-A-1B5-enwiki/epoch=1-step=20.ckpt
