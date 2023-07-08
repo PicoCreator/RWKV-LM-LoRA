@@ -247,16 +247,14 @@ class RWKV(L.LightningModule):
 
     def __init__(self,
                  ctx_len: int,
-                 ctx_len_cutoffs: List[int],
-                 ctx_len_warmup_steps: List[int],
                  n_embd: int,
                  n_layer: int,
                  vocab_size: int,
-                 grad_cp: bool,
                  lr_init: float,
                  lr_final: float = -1.0,
                  lr_period: int = -1,
                  lr_period_type: str = 'epoch',
+                 grad_cp: bool = True,
                  warmup_steps: int = -1,
                  beta1: float = 0.9,
                  beta2: float = 0.99,
@@ -269,6 +267,8 @@ class RWKV(L.LightningModule):
                  dim_att: Optional[int] = None,
                  dim_ffn: Optional[int] = None,
                  load_model: Optional[str] = None,
+                 ctx_len_cutoffs: List[int] = [],
+                 ctx_len_warmup_steps: List[int] = [],
                  torch_set_float32_matmul_precision:str = 'high'
                  ):
         super().__init__()
