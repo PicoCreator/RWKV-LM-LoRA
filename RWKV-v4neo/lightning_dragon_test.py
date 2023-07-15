@@ -1,36 +1,108 @@
 #!/usr/bin/env python3
-import sys
+import sys, os, yaml
+import torch
 
 # ----
-# This script is used to preload the huggingface dataset
-# that is configured in the config.yaml file
+# This script is used to do an inference test through lightning api directly
+# allowing us to perform inference, without rewriting a new "inference" library
+#
+# Mostly useful for performing experiments on the model
 # ----
 
 # Check for argument, else throw error
-if len(sys.argv) < 2:
+if len(sys.argv) < 3:
     print("No arguments supplied")
-    print("Usage: python3 dragon_test.py <model-path>")
+    print("Usage: python3 lightning_dragon_test.py <config-path> <model-path>")
     sys.exit(1)
-MODEL_PATH=sys.argv[1]
+
+CONFIG_PATH=sys.argv[1]
+MODEL_PATH=sys.argv[2]
 
 # ----
 # Lets load the model
 # ----
 
+# Lets disable LightningModule
+os.environ["RWKV_USE_NN_MODULE"] = "1"
+
 from src.model import RWKV
+from src.trainer import RWKVLightningTrainer
+from transformers import PreTrainedTokenizerFast
 
-# We are using the lightning module for inference directly
-# this allow us to validate any model changes directly
+# Read the config file
+assert os.path.exists(CONFIG_PATH), "Config file does not exist"
+with open(CONFIG_PATH, 'r') as f:
+    lightning_config = yaml.safe_load(f)
 
-model = RWKV.load_from_checkpoint(MODEL_PATH)
+# Lets load the model directly
+loaded_state = torch.load(MODEL_PATH, map_location='cuda')
+
+# Get the model config, and overwrite the model path
+model_config = lightning_config['model']
+model_config["load_model"] = MODEL_PATH
+# Disable gradiant checkpoint, which uses as deepspeed is not loaded
+model_config["grad_cp"] = False 
+model_config["_torch_load_state"] = loaded_state
+
+# # Lets load the trainer
+# trainer_config = lightning_config['trainer']
+# trainer_config["inference_mode"]=True
+# del trainer_config["logger"]
+# del trainer_config["callbacks"]
+# trainer = RWKVLightningTrainer(**trainer_config)
+
+# Lets load the model, and set it to eval mode
+model = RWKV(**model_config)
 model.eval()
 
+# Tokenizer (only support 20B for now), we also disable parallelism,
+# as its not really needed, and induces lots of warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+tokenizer_file = "./20B_tokenizer.json"
+tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_file)
 
+# Lets eval the model?
+def completion(
+        prompt,
+        token_count: int = 200,
+        ):
+    # Tokenize the prompt
+    prompt_tokens_input = tokenizer(prompt, return_tensors="pt")["input_ids"]
+    prompt_tokens = prompt_tokens_input[0]
+    prompt_tokens_len = len(prompt_tokens)
 
+    # Get the model context len cutoff
+    ctx_len_limit = int(model_config["ctx_len"])
 
+    # Lets generate the initial logits and hidden states
+    logits = None
+    last_shift_states = None
+    last_wkv_states = None
 
+    print( '' )
+    print( "prompting started ... ", prompt_tokens_len, ctx_len_limit)
 
+    # Lets loop through the prompt tokens, in chunks of ctx_len_limit
+    for i in range(0, prompt_tokens_len, ctx_len_limit):
+        print("attempting inference pass")
 
+        tokens = prompt_tokens_input[:, i:i+ctx_len_limit]
+
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            logits, last_shift_states, last_wkv_states = model.forward(
+                tokens, last_shift_states=last_shift_states, last_wkv_states=last_wkv_states
+            )
+    
+    # Log the logits?
+    print( "logits.shape", logits.shape )
+    print( "logits", logits )
+
+    print( "prompt_tokens.shape", prompt_tokens.shape )
+
+# Perform the dragon test
+prompt = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
+print(prompt, end='')
+completion(prompt)
 
 # # If model strategy is not specified, use 'cpu fp32' as default
 # MODEL_STRATEGY=None

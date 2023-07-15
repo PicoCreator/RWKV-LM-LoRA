@@ -419,8 +419,12 @@ class RWKV(RWKV_MAIN_MODULE):
                  dim_ffn: Optional[int] = None,
                  substep_cuda_cache_clear: bool = False,
                  substep_logging: bool = False,
-                 torch_set_float32_matmul_precision:str = 'high'
-                 ):
+                 torch_set_float32_matmul_precision:str = 'high',
+
+                 # Pass the torch model directly, this is used 
+                 # for direct inference mode, outside pytorch lightning
+                 _torch_load_state = None
+                ):
 
         # Lets save everything in one shot
         # (this is used for wandb logging)
@@ -482,7 +486,11 @@ class RWKV(RWKV_MAIN_MODULE):
         self.ln_out = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
 
-        self.load_state_dict(torch.load(load_model, map_location='cpu'))
+        # _torch_load_state is used to initialize the model without lightning module
+        if _torch_load_state is not None:
+            self.load_state_dict(_torch_load_state)
+        else:
+            self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
         if self.bptt_learning == False:
