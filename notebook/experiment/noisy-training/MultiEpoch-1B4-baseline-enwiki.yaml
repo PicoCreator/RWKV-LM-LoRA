@@ -35,7 +35,7 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'MultiEpoch-Baseline-1B4 enwiki_100k foundation (train-ctx=8192)'
+      name: 'MultiEpoch-Baseline-1B4 enwiki_100k foundation (train-ctx=4096)'
       project: 'RWKV-Noise-Training'
       tags: ['RWKV', 'noise']
       id: null
@@ -194,7 +194,7 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 8192
+  ctx_len: 4096
 
   # Data samples would be cut down to the respective max ctx_len_cutoffs
   # values if its larger then ctx_len. If the data sample is larger then
@@ -256,7 +256,7 @@ data:
   # Use this if you have built your own dataset and saved it with `save_to_disk()`
   # with source left as null. Other wise configure this to a directory which the 
   # dataset will be built and tokenized by the huggingface dataset process.
-  data_path: ../datapath/enwiki_100k_8192/
+  data_path: ../datapath/enwiki_100k_4096/
 
   # Other wise provide the source path, which is used as huggingface dataset path
   # this will be used to populate the dataset_path
@@ -304,7 +304,7 @@ data:
   # This is ignored, if source is not set as text
   # This is ignored, if set to zero
   # ---
-  text_rechunk_size: 8192
+  text_rechunk_size: 4096
 
   # Apply text rechunk to the dataset, even if its not a 'text' source
   # This is done only after dataset filtering, and if source is not 'text'
