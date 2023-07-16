@@ -62,7 +62,7 @@ tokenizer_file = "./20B_tokenizer.json"
 tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_file)
 
 # Lets eval the model?
-def completion(
+def _completion(
         prompt,
         token_count: int = 200,
         ):
@@ -87,11 +87,9 @@ def completion(
         print("attempting inference pass")
 
         tokens = prompt_tokens_input[:, i:i+ctx_len_limit]
-
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-            logits, last_shift_states, last_wkv_states = model.forward(
-                tokens, last_shift_states=last_shift_states, last_wkv_states=last_wkv_states
-            )
+        logits, last_shift_states, last_wkv_states = model.forward(
+            tokens, last_shift_states=last_shift_states, last_wkv_states=last_wkv_states
+        )
     
     # Log the logits?
     print( "logits.shape", logits.shape )
@@ -99,6 +97,15 @@ def completion(
 
     print( "prompt_tokens.shape", prompt_tokens.shape )
 
+# Lets eval the model?
+def completion(
+        prompt,
+        token_count: int = 200,
+        ):
+    with torch.no_grad():
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            _completion(prompt, token_count=token_count)
+    
 # Perform the dragon test
 prompt = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(prompt, end='')

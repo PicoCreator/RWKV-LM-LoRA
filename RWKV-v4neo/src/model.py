@@ -265,6 +265,9 @@ class RWKV_TimeMix(JITModClass):
     @TCompileBaseline
     def forward(self, x, last_state: TimeMixState):
         k, v, sr = self._forward_kvsr(x, last_state)
+
+        print("WKV_OP", self.time_decay, self.time_first, k, v, last_state.wkv_state)
+
         y, new_wkv_state = wkv_op(self.time_decay, self.time_first,
                                   k, v, last_state.wkv_state)
         return self._forward_out(sr, y, x[:, -1], new_wkv_state)
