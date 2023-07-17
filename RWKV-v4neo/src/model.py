@@ -419,7 +419,10 @@ class RWKV(RWKV_MAIN_MODULE):
                  dim_ffn: Optional[int] = None,
                  substep_cuda_cache_clear: bool = False,
                  substep_logging: bool = False,
-                 torch_set_float32_matmul_precision:str = 'high'
+                 torch_set_float32_matmul_precision:str = 'high',
+
+                 # EXPERIMENTAL noise based training
+                 noisy_init_state_training: bool = False
                  ):
 
         # Lets save everything in one shot
@@ -455,6 +458,9 @@ class RWKV(RWKV_MAIN_MODULE):
         self.bptt_truncated_learning = bptt_truncated_learning
         self.substep_cuda_cache_clear = substep_cuda_cache_clear
         self.substep_logging = substep_logging
+
+        # EXPERIMENTAL noise based training
+        self.noisy_init_state_training = noisy_init_state_training
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -868,9 +874,31 @@ class RWKV(RWKV_MAIN_MODULE):
         total_loss = torch.tensor(
             0, dtype=self.emb.weight.dtype).requires_grad_()
         steps = 0
-        states = BlockStateList.create(self.n_layer, B, C, seq.device,
-                                       self.emb.weight.dtype)
         segment_count = math.ceil(T / self.ctx_len)
+        states = BlockStateList.create(self.n_layer, B, C, seq.device,
+                                    self.emb.weight.dtype)
+
+        if self.noisy_init_state_training:
+            # We generate a noisy prompt, and perform a forward pass for it
+            # the idea here, is that by intrdoucing a more randomized initial state
+            # the model will generalise and learn better. Even with multi-epoch learning
+            # as each learning run will never be "unique"
+
+            # Noise range, will be half to full context length
+            noise_range = randint(self.ctx_len // 2, self.ctx_len - 1)
+
+            # Generate non-zero noise values, between 1 to vocab size
+            # of length equals to the noise range
+            noise = torch.randint(1, self.vocab_size, (noise_range,))
+
+            # Generate the noise without gradient
+            with torch.no_grad():  
+                logits, new_shift_states, new_wkv_states = self(
+                    noise, states.shift_states, states.wkv_states
+                )
+                new_shift_states.detach().requires_grad_(False)
+                new_wkv_states.detach().requires_grad_(False)
+                states = BlockStateList(new_shift_states, new_wkv_states)
 
         #
         # BPTT learning, we split the sequence into segments
