@@ -890,6 +890,7 @@ class RWKV(RWKV_MAIN_MODULE):
             # Generate non-zero noise values, between 1 to vocab size
             # of length equals to the noise range
             noise = torch.randint(1, self.vocab_size, (noise_range,))
+            noise.append(0)  # Append the EOS token
 
             # Generate the noise without gradient
             with torch.no_grad():  
