@@ -10,46 +10,60 @@ import torch
 # ----
 
 # Check for argument, else throw error
-if len(sys.argv) < 3:
+if len(sys.argv) < 2:
     print("No arguments supplied")
-    print("Usage: python3 lightning_dragon_test.py <config-path> <model-path>")
+    print("Usage: python3 lightning_dragon_test.py <model-path>")
     sys.exit(1)
-
-CONFIG_PATH=sys.argv[1]
-MODEL_PATH=sys.argv[2]
+MODEL_PATH=sys.argv[1]
 
 # ----
 # Lets load the model
 # ----
 
 # Lets disable LightningModule
-os.environ["RWKV_USE_NN_MODULE"] = "1"
+# os.environ["RWKV_USE_NN_MODULE"] = "1"
 
 from src.model import RWKV
 from src.trainer import RWKVLightningTrainer
 from transformers import PreTrainedTokenizerFast
 
-# Read the config file
-assert os.path.exists(CONFIG_PATH), "Config file does not exist"
-with open(CONFIG_PATH, 'r') as f:
-    lightning_config = yaml.safe_load(f)
-
 # Lets load the model directly
 loaded_state = torch.load(MODEL_PATH, map_location='cuda')
 
-# Get the model config, and overwrite the model path
-model_config = lightning_config['model']
-model_config["load_model"] = MODEL_PATH
-# Disable gradiant checkpoint, which uses as deepspeed is not loaded
-model_config["grad_cp"] = False 
-model_config["_torch_load_state"] = loaded_state
+# Get the model params
+model_keys = list(loaded_state.keys())
 
-# # Lets load the trainer
-# trainer_config = lightning_config['trainer']
-# trainer_config["inference_mode"]=True
-# del trainer_config["logger"]
-# del trainer_config["callbacks"]
-# trainer = RWKVLightningTrainer(**trainer_config)
+# Get the maximum block id
+max_block_id = 0
+for x in model_keys:
+    if 'blocks.' in x:
+        block_id = int(x.split('.')[1])
+        max_block_id = max(max_block_id, block_id)
+
+# Compute the layer count & embed sizes
+n_layer = max_block_id + 1
+n_embd = loaded_state['head.weight'].shape[1]
+vocab_size = loaded_state['head.weight'].shape[0]
+
+# Context length used for block inference
+# has a direct impact onto vram usage
+CTX_LEN = 1024
+
+## ---
+
+# Prepare the model config with the model path, and custom torch load
+model_config = {}
+model_config["load_model"] = MODEL_PATH
+model_config["n_embd"] = n_embd 
+model_config["n_layer"] = n_layer 
+model_config["vocab_size"] = vocab_size 
+model_config["_torch_load_state"] = loaded_state
+model_config["ctx_len"] = CTX_LEN
+
+# Disable grad_cp, as it uses deepspeed
+model_config["grad_cp"] = False
+
+## ---
 
 # Lets load the model, and set it to eval mode
 model = RWKV(**model_config)
@@ -75,25 +89,26 @@ def _completion(
     ctx_len_limit = int(model_config["ctx_len"])
 
     # Lets generate the initial logits and hidden states
-    logits = None
+    logits_arr = None
     last_shift_states = None
     last_wkv_states = None
 
-    print( '' )
-    print( "prompting started ... ", prompt_tokens_len, ctx_len_limit)
+    print("")
 
     # Lets loop through the prompt tokens, in chunks of ctx_len_limit
     for i in range(0, prompt_tokens_len, ctx_len_limit):
-        print("attempting inference pass")
+        # print("attempting inference pass")
 
         tokens = prompt_tokens_input[:, i:i+ctx_len_limit]
-        logits, last_shift_states, last_wkv_states = model.forward(
+        logits_arr, last_shift_states, last_wkv_states = model.forward(
             tokens, last_shift_states=last_shift_states, last_wkv_states=last_wkv_states
         )
     
-    # Log the logits?
-    print( "logits.shape", logits.shape )
-    print( "logits", logits )
+    # # Log the logits?
+    print( "logits.shape", logits_arr.shape )
+    print( "logits dtype", logits_arr.dtype )
+    print( "logits.??", logits_arr[-1][-1] )
+    # print( "logits", logits )
 
     print( "prompt_tokens.shape", prompt_tokens.shape )
 
@@ -108,7 +123,7 @@ def completion(
     
 # Perform the dragon test
 prompt = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
-print(prompt, end='')
+# print(prompt, end='')
 completion(prompt)
 
 # # If model strategy is not specified, use 'cpu fp32' as default
