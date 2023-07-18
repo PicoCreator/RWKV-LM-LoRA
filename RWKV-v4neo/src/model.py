@@ -440,6 +440,7 @@ class RWKV(RWKV_MAIN_MODULE):
         self.ctx_len_warmup_steps = ctx_len_warmup_steps
         self.n_embd = n_embd
         self.n_layer = n_layer
+        self.vocab_size = vocab_size
         self.layerwise_lr = layerwise_lr
         self.grad_cp = grad_cp
         self.target_lr_init = target_lr_init
@@ -887,18 +888,38 @@ class RWKV(RWKV_MAIN_MODULE):
             # Noise range, will be half to full context length
             noise_range = randint(self.ctx_len // 2, self.ctx_len - 1)
 
-            # Generate non-zero noise values, between 1 to vocab size
-            # of length equals to the noise range
-            noise = torch.randint(1, self.vocab_size, (noise_range,))
-            noise.append(0)  # Append the EOS token
-
             # Generate the noise without gradient
             with torch.no_grad():  
-                logits, new_shift_states, new_wkv_states = self(
+                # Generate non-zero noise values, between 1 to vocab size
+                # of length equals to the noise range
+                noise = torch.randint(1, self.vocab_size-1, (1, noise_range), device=seq.device, dtype=torch.long)
+                # Overwrite the last token with the EOS token (0)
+                noise[0][-1] = 0
+
+                # Prepare the noise mask, and target mask
+                noise_mask = torch.ones_like(noise, device=seq.device, dtype=torch.long)
+                noise_target = torch.ones_like(noise, device=seq.device, dtype=torch.long)
+
+                # Forward the states, with the noise
+                # This throws a CUDA exception somehow, so falling back to indirect method
+                logits, new_shift_states, new_wkv_states = self.forward(
                     noise, states.shift_states, states.wkv_states
                 )
-                new_shift_states.detach().requires_grad_(False)
-                new_wkv_states.detach().requires_grad_(False)
+
+                # # Use same code base as the forward function, but with the noise
+                # ignore_loss, new_shift_states, new_wkv_states, ignore_steps = checkpointed_step(
+                #     noise,
+                #     noise_target,
+                #     noise_mask,
+                #     torch.tensor(0, dtype=self.emb.weight.dtype, device=seq.device).requires_grad_(True),
+                #     states.shift_states,
+                #     states.wkv_states,
+                #     0,
+                # )
+
+                # Ensure the states are detached & no gradient
+                new_shift_states = new_shift_states.detach().requires_grad_(False)
+                new_wkv_states = new_wkv_states.detach().requires_grad_(False)
                 states = BlockStateList(new_shift_states, new_wkv_states)
 
         #
