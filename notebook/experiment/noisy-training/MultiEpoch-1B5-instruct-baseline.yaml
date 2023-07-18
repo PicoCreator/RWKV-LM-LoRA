@@ -118,7 +118,7 @@ trainer:
   # Generally what you want to configure is the maximum number of epochs
   # Leave it as -1, and it will keep going forever till interrupted
   # Or set it as a number, and it will stop after that number of epochs
-  max_epochs: 1
+  max_epochs: 10
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -141,6 +141,11 @@ trainer:
   # Alternative to batch size
   # accumulate_grad_batches: 12
 
+  # Validation frequency checks
+  val_check_interval: 0.25
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 1
+
   # Various other settings, you probably want to leave alone
   fast_dev_run: false
   limit_train_batches: null
@@ -148,10 +153,7 @@ trainer:
   limit_test_batches: null
   limit_predict_batches: null
   overfit_batches: 0.0
-  val_check_interval: null
-  check_val_every_n_epoch: 1
   num_sanity_val_steps: 0
-  log_every_n_steps: 1
   enable_checkpointing: null
   enable_progress_bar: null
   enable_model_summary: null
@@ -274,7 +276,7 @@ data:
   # After loading the dataset, split out test data used for validation, 
   # This process is skipped if the dataset includes a test split
   # This process is skipped if set to zero
-  test_split: 0.005
+  test_split: 0.05
   test_split_shuffle: false
 
   # Tokenizer to use, use either the inbuilt 'neox', or 'world' tokenizer
