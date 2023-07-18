@@ -22,6 +22,7 @@ MODEL_PATH=sys.argv[1]
 
 # Lets disable LightningModule
 # os.environ["RWKV_USE_NN_MODULE"] = "1"
+torch.set_default_dtype(torch.float32)
 
 from src.model import RWKV
 from src.trainer import RWKVLightningTrainer
@@ -106,12 +107,12 @@ def _completion(
         logits_arr, last_shift_states, last_wkv_states = model(
             tokens, last_shift_states=last_shift_states, last_wkv_states=last_wkv_states
         )
-    
-    # # Log the logits?
-    print( "logits.shape", logits_arr.shape )
-    print( "logits dtype", logits_arr.dtype )
-    print( "logits.??", logits_arr[-1][-2] )
-    # print( "logits", logits )
+        
+        # # Log the logits?
+        print( "logits.shape", logits_arr.shape )
+        print( "logits dtype", logits_arr.dtype )
+        print( "logits.??", logits_arr[0][0] )
+        # print( "logits", logits )
 
     print( "prompt_tokens.shape", prompt_tokens.shape )
 

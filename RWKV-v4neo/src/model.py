@@ -275,7 +275,8 @@ class RWKV_TimeMix(JITModClass):
 
         # Force BF16 for time_first values
         # this can happen if running the model in NN mode (without torch lightning), for unknown reasons
-        self.time_first = self.time_first.to(torch.bfloat16)
+        if self.time_first.dtype != torch.bfloat16:
+            self.time_first = self.time_first.to(torch.bfloat16)
 
         y, new_wkv_state = wkv_op(self.time_decay, self.time_first,
                                   k, v, last_state.wkv_state)
@@ -743,7 +744,7 @@ class RWKV(RWKV_MAIN_MODULE):
         new_states = BlockStateList.empty(self.n_layer, B, self.n_embd,
                                           x.device, x.dtype)
         
-        if last_shift_states is None:
+        if last_shift_states == None:
             cur_bs_list = BlockStateList.create(
                 self.n_layer, 
                 B, self.n_embd,
