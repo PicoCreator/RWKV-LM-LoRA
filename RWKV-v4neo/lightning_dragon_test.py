@@ -111,7 +111,7 @@ def _completion(
         # # Log the logits?
         print( "logits.shape", logits_arr.shape )
         print( "logits dtype", logits_arr.dtype )
-        print( "logits.??", logits_arr[0][0] )
+        print( "logits.??", logits_arr[0][1] ) # For some reason this is all NaN ??
         # print( "logits", logits )
 
     print( "prompt_tokens.shape", prompt_tokens.shape )
