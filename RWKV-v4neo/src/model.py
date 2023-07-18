@@ -744,10 +744,11 @@ class RWKV(RWKV_MAIN_MODULE):
                                           x.device, x.dtype)
         
         if last_shift_states is None:
-            cur_bs_list = BlockStateList.empty(
-                self.n_layer, B,
-                self.n_embd,
-                x.device, x.dtype
+            cur_bs_list = BlockStateList.create(
+                self.n_layer, 
+                B, self.n_embd,
+                x.device,
+                self.emb.weight.dtype
             )
         else:
             cur_bs_list = BlockStateList(last_shift_states, last_wkv_states)

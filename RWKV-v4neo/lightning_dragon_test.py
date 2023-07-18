@@ -27,8 +27,9 @@ from src.model import RWKV
 from src.trainer import RWKVLightningTrainer
 from transformers import PreTrainedTokenizerFast
 
-# Lets load the model directly
-loaded_state = torch.load(MODEL_PATH, map_location='cuda')
+# Lets load the model directly, it has to be loaded to CPU first
+# otherwise fp / bf related issues occurs
+loaded_state = torch.load(MODEL_PATH, map_location='cpu')
 
 # Get the model params
 model_keys = list(loaded_state.keys())
@@ -81,7 +82,7 @@ def _completion(
         token_count: int = 200,
         ):
     # Tokenize the prompt
-    prompt_tokens_input = tokenizer(prompt, return_tensors="pt")["input_ids"]
+    prompt_tokens_input = tokenizer(prompt, return_tensors="pt")["input_ids"].type(torch.long)
     prompt_tokens = prompt_tokens_input[0]
     prompt_tokens_len = len(prompt_tokens)
 
@@ -100,14 +101,16 @@ def _completion(
         # print("attempting inference pass")
 
         tokens = prompt_tokens_input[:, i:i+ctx_len_limit]
-        logits_arr, last_shift_states, last_wkv_states = model.forward(
+        print("tokens", tokens)
+
+        logits_arr, last_shift_states, last_wkv_states = model(
             tokens, last_shift_states=last_shift_states, last_wkv_states=last_wkv_states
         )
     
     # # Log the logits?
     print( "logits.shape", logits_arr.shape )
     print( "logits dtype", logits_arr.dtype )
-    print( "logits.??", logits_arr[-1][-1] )
+    print( "logits.??", logits_arr[-1][-2] )
     # print( "logits", logits )
 
     print( "prompt_tokens.shape", prompt_tokens.shape )
@@ -118,8 +121,7 @@ def completion(
         token_count: int = 200,
         ):
     with torch.no_grad():
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            _completion(prompt, token_count=token_count)
+        _completion(prompt, token_count=token_count)
     
 # Perform the dragon test
 prompt = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
