@@ -4,7 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 
 import wandb
 from datasets import load_from_disk, load_dataset
-from transformers import PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast, AutoTokenizer
 from multiprocessing import cpu_count
 num_cpus = cpu_count()
 
@@ -43,7 +43,9 @@ def prepare_data_static(**kargs):
         elif kargs["tokenizer"] == "world":
             raise NotImplementedError("World tokenizer not implemented yet")
         else:
-            tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer)
+            tokenizer = AutoTokenizer.from_pretrained(kargs["tokenizer"], bos_token='<|startoftext|>',
+                                          eos_token='<|endoftext|>', pad_token='<|pad|>')
+            tokenizer.padd_side = "right"
 
         # Multi column merging default values setup
         if kargs["multi_column_keys"] is None:
