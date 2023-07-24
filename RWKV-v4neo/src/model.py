@@ -390,7 +390,7 @@ class Block(nn.Module):
         att_states = {}
         x_ln1 = self.ln1(x)
         for i in range(self.att_channels):
-            att_out, att_state = self.att(
+            att_out, att_state = self.att[i](
                 x_ln1,
                 last_state.time_mix_states[i],
             )
