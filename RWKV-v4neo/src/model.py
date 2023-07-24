@@ -149,9 +149,9 @@ class ChannelMixState:
 
 class BlockState:
 
-    def __init__(self, time_mix_state: TimeMixState,
+    def __init__(self, time_mix_states: List[TimeMixState],
                  channel_mix_state: ChannelMixState):
-        self.time_mix_state = time_mix_state
+        self.time_mix_states = time_mix_states
         self.channel_mix_state = channel_mix_state
 
 
@@ -364,7 +364,7 @@ class RWKV_ChannelMix(JITModClass):
 
 class Block(nn.Module):
 
-    def __init__(self, layer_id, n_layer, n_embd, dim_att, dim_ffn):
+    def __init__(self, layer_id, n_layer, n_embd, dim_att, dim_ffn, att_channels=2):
         super().__init__()
         self.layer_id = layer_id
 
@@ -374,23 +374,41 @@ class Block(nn.Module):
         if self.layer_id == 0:
             self.ln0 = nn.LayerNorm(n_embd)
 
-        self.att = RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att)
+        self.att_channels = att_channels
+        
+        self.att = []
+        for i in range(self.att_channels):
+            self.att.append(RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att))
+
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
     def forward(self, x, last_state: BlockState):
         if self.layer_id == 0:
             x = self.ln0(x)
-        att_out, att_state = self.att(
-            self.ln1(x),
-            last_state.time_mix_state,
-        )
+            
+        att_outs = []
+        att_states = {}
+        x_ln1 = self.ln1(x)
+        for i in range(self.att_channels):
+            att_out, att_state = self.att(
+                x_ln1,
+                last_state.time_mix_states[i],
+            )
+            att_outs.append(att_out)
+            
+            # making sure the order doesn't somehow get messed up in the state variable (i don't feel like testing this) - nathan
+            att_states[i] = att_state
+            
+        # matrix addition of all attention outputs
+        att_out = torch.sum(torch.stack(att_outs), dim=0)
+        
         x = x + att_out
         ffn_out, ffn_state = self.ffn(
             self.ln2(x),
             last_state.channel_mix_state,
         )
         x = x + ffn_out
-        return x, BlockState(att_state, ffn_state)
+        return x, BlockState(att_states, ffn_state)
 
 
 class L2Wrap(torch.autograd.Function):
