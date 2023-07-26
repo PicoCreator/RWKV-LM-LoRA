@@ -816,7 +816,7 @@ class RWKV(L.LightningModule):
                 self.time_shift_channels
             )
         else:
-            cur_bs_list = BlockStateList(last_att_shift_channel_states, last_ffn_shift_states, last_wkv_shift_channel_states)
+            cur_bs_list = BlockStateList(last_att_shift_channel_states, last_ffn_shift_states, last_wkv_shift_channel_states, self.time_shift_channels)
 
         # Avoid using the zip operation, as torch.compile throws an exception on it
         # with `zip not reconized as a valid function`
