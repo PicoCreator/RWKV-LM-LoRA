@@ -179,12 +179,12 @@ class BlockStateList:
     # @ TCompileMax (no difference)
     @staticmethod
     def empty(N, B, C, device, dtype, att_channels):
-        wkv_shift_channel_states = torch.empty((N, att_channels, B, C, 3),
+        wkv_shift_channel_states = [torch.empty((N, B, C, 3),
                                  device=device,
-                                 dtype=torch.float)
+                                 dtype=torch.float)] * att_channels
         
         # HOT FIX 2**12, 12 should = layer count
-        att_shift_channel_states = torch.empty((N, att_channels, B, 2**12, C), device=device, dtype=dtype)
+        att_shift_channel_states = [torch.empty((N, B, 2**12, C), device=device, dtype=dtype)] * att_channels
         ffn_shift_states = torch.empty((N, B, 1, C), device=device, dtype=dtype)
         return BlockStateList(att_shift_channel_states, ffn_shift_states, wkv_shift_channel_states)
 
@@ -493,7 +493,7 @@ class RWKV(L.LightningModule):
                  substep_cuda_cache_clear: bool = False,
                  substep_logging: bool = False,
                  torch_set_float32_matmul_precision:str = 'high',
-                 time_shift_channels: int = 2
+                 time_shift_channels: int = 4
                  ):
 
         # Lets save everything in one shot
@@ -951,7 +951,7 @@ class RWKV(L.LightningModule):
             0, dtype=self.emb.weight.dtype).requires_grad_()
         steps = 0
         states = BlockStateList.create(self.n_layer, B, C, seq.device,
-                                       self.emb.weight.dtype)
+                                       self.emb.weight.dtype, self.time_shift_channels)
         segment_count = math.ceil(T / self.ctx_len)
 
         #
