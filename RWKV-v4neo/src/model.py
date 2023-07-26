@@ -1036,13 +1036,13 @@ class RWKV(L.LightningModule):
                 # this limits the backprop process, reduces loss learning rate, 
                 # but save vram across extreamly large backpropagation steps
                 if self.bptt_truncated_learning:
-                    prv_att_shift_states = states.att_shift_states.clone().detach().requires_grad_(False)
+                    prv_att_shift_states = states.att_shift_channel_states.clone().detach().requires_grad_(False)
                     prv_ffn_shift_states = states.ffn_shift_states.clone().detach().requires_grad_(False)
-                    prv_wkv_states = states.wkv_states.clone().detach().requires_grad_(False)
+                    prv_wkv_states = states.wkv_shift_channel_states.clone().detach().requires_grad_(False)
                 else:
-                    prv_att_shift_states = states.att_shift_states
+                    prv_att_shift_states = states.att_shift_channel_states
                     prv_ffn_shift_states = states.ffn_shift_states
-                    prv_wkv_states = states.wkv_states
+                    prv_wkv_states = states.wkv_shift_channel_states
                 
                 # We use a dummy masked token 0, to do additional dummy checkpoint/forward/backprop when needed
                 # for each additional call after the current "segment_count" max
@@ -1106,9 +1106,9 @@ class RWKV(L.LightningModule):
                         targets[:, i * segment_size:(i + 1) * segment_size],
                         seq_mask[:, i * segment_size:(i + 1) * segment_size],
                         total_loss,
-                        states.att_shift_states,
+                        states.att_shift_channel_states,
                         states.ffn_shift_states,
-                        states.wkv_states,
+                        states.wkv_shift_channel_states,
                         steps,
                     )
                 else:
@@ -1117,9 +1117,9 @@ class RWKV(L.LightningModule):
                         targets[:, i * segment_size:(i + 1) * segment_size],
                         seq_mask[:, i * segment_size:(i + 1) * segment_size],
                         total_loss,
-                        states.att_shift_states,
+                        states.att_shift_channel_states,
                         states.ffn_shift_states,
-                        states.wkv_states,
+                        states.wkv_shift_channel_states,
                         steps,
                     )
 
@@ -1272,9 +1272,9 @@ class SimpleRWKV():
             ffn_shift_states = None
             wkv_states = None
         else:
-            att_shift_states = stateObj["att_shift_states"]
+            att_shift_states = stateObj["att_shift_channel_states"]
             ffn_shift_states = stateObj["ffn_shift_states"]
-            wkv_states = stateObj["wkv_states"]
+            wkv_states = stateObj["wkv_shift_channel_states"]
         
         # For each token, process the state, in batches up to ctx_len
         for i in range(0, token_len, self.ctx_len):
