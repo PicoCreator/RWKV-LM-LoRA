@@ -186,7 +186,7 @@ class BlockStateList:
         # HOT FIX 2**12, 12 should = layer count
         att_shift_channel_states = [torch.empty((N, B, 2**12, C), device=device, dtype=dtype)] * att_channels
         ffn_shift_states = torch.empty((N, B, 1, C), device=device, dtype=dtype)
-        return BlockStateList(att_shift_channel_states, ffn_shift_states, wkv_shift_channel_states)
+        return BlockStateList(att_shift_channel_states, ffn_shift_states, wkv_shift_channel_states, att_channels)
 
     def __getitem__(self, layer: int):
         return BlockState(
@@ -378,7 +378,10 @@ class Block(nn.Module):
 
         self.att_channels = att_channels
         
-        self.att = [ RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att) for i in range(self.att_channels) ]
+        self.att = []
+        for i in range(self.att_channels):
+            self.att.append(RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att))
+            print("uwu generated layer", layer_id, "channel", i, " uwu")
 
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
