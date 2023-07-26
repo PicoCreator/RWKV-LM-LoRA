@@ -168,7 +168,7 @@ class BlockStateList:
     def create(N, B, C, device, dtype, att_channels):
         result = BlockStateList.empty(N, B, C, device, dtype, att_channels)
         
-        for i in range(len(att_channels)):
+        for i in range(att_channels):
             result.wkv_shift_channel_states[i][:] = 0
             result.wkv_shift_channel_states[i][:, :, :, -1] = -1e38
 
