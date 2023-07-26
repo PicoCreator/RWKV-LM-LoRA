@@ -401,7 +401,7 @@ class Block(nn.Module):
         for i in range(self.att_channels):
             att_out, att_state = self.att[i](
                 x_ln1,
-                last_state.time_mix_states[i] if last_state.time_mix_states is not None else None,
+                last_state.time_mix_states[i] if last_state.time_mix_states is not None else TimeMixState(None, None),
             )
             att_outs.append(att_out)
             
