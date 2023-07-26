@@ -389,7 +389,7 @@ class Block(nn.Module):
 
     def forward(self, x, last_state: BlockState):
         print("hi")
-        print(len(last_state))
+        print(last_state)
         
         if self.layer_id == 0:
             x = self.ln0(x)
