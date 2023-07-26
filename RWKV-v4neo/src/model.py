@@ -168,7 +168,7 @@ class BlockStateList:
     def create(N, B, C, device, dtype, att_channels):
         result = BlockStateList.empty(N, B, C, device, dtype, att_channels)
         
-        for i in len(range(att_channels)):
+        for i in range(len(att_channels)):
             result.wkv_shift_channel_states[i][:] = 0
             result.wkv_shift_channel_states[i][:, :, :, -1] = -1e38
 
@@ -381,11 +381,10 @@ class Block(nn.Module):
 
         self.att_channels = att_channels
         
-        self.att = nn.ModuleList()
-        for i in range(self.att_channels):
-            self.att.append(RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att))
-            print("uwu generated layer", layer_id, "channel", i, " uwu")
-
+        self.att = nn.ModuleList([
+            RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att) for i in range(att_channels)
+        ])
+        
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
     def forward(self, x, last_state: BlockState):
