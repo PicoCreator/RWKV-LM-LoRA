@@ -396,9 +396,10 @@ class Block(nn.Module):
         
         x_ln1 = self.ln1(x)
         for i in range(self.att_channels):
+            print(len(last_state.time_mix_states))
             att_out, att_state = self.att[i](
                 x_ln1,
-                last_state.time_mix_states[self.layer_id][i],
+                last_state.time_mix_states[i],
             )
             att_outs.append(att_out)
             
