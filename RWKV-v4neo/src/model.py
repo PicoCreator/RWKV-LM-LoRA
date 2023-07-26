@@ -498,7 +498,7 @@ class RWKV(L.LightningModule):
                  substep_cuda_cache_clear: bool = False,
                  substep_logging: bool = False,
                  torch_set_float32_matmul_precision:str = 'high',
-                 time_shift_channels: int = 4
+                 time_shift_channels: int = 2
                  ):
 
         # Lets save everything in one shot
