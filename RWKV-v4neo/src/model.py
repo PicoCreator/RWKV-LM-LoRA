@@ -402,7 +402,7 @@ class Block(nn.Module):
             print(len(last_state.time_mix_states))
             att_out, att_state = self.att[i](
                 x_ln1,
-                last_state.time_mix_states[i],
+                last_state.time_mix_states[i] if last_state.time_mix_states is not None else None,
             )
             att_outs.append(att_out)
             
