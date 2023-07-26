@@ -381,7 +381,7 @@ class Block(nn.Module):
 
         self.att_channels = att_channels
         
-        self.att = []
+        self.att = nn.ModuleList()
         for i in range(self.att_channels):
             self.att.append(RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att))
             print("uwu generated layer", layer_id, "channel", i, " uwu")
