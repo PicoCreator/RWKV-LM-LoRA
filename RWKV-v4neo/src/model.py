@@ -157,48 +157,50 @@ class BlockState:
 
 class BlockStateList:
 
-    def __init__(self, att_shift_states, ffn_shift_states, wkv_states):
-        self.wkv_states = wkv_states
-        self.att_shift_states = att_shift_states
+    def __init__(self, att_shift_channel_states, ffn_shift_states, wkv_shift_channel_states, att_channels):
+        self.wkv_shift_channel_states = wkv_shift_channel_states
+        self.att_shift_channel_states = att_shift_channel_states
         self.ffn_shift_states = ffn_shift_states
+        self.att_channels = att_channels
     
     # @ TCompileMax (no difference)
     @staticmethod
-    def create(N, B, C, device, dtype):
-        result = BlockStateList.empty(N, B, C, device, dtype)
+    def create(N, B, C, device, dtype, att_channels):
+        result = BlockStateList.empty(N, B, C, device, dtype, att_channels)
         result.wkv_states[:] = 0
         result.wkv_states[:, :, :, -1] = -1e38
 
-        result.att_shift_states[:] = 0
+        result.att_shift_channel_states[:] = 0
+        
         result.ffn_shift_states[:] = 0
 
         return result
 
     # @ TCompileMax (no difference)
     @staticmethod
-    def empty(N, B, C, device, dtype):
-        wkv_states = torch.empty((N, B, C, 3),
+    def empty(N, B, C, device, dtype, att_channels):
+        wkv_shift_channel_states = torch.empty((N, att_channels, B, C, 3),
                                  device=device,
                                  dtype=torch.float)
         
         # HOT FIX 2**12, 12 should = layer count
-        att_shift_states = torch.empty((N, B, 2**12, C), device=device, dtype=dtype)
+        att_shift_channel_states = torch.empty((N, att_channels, B, 2**12, C), device=device, dtype=dtype)
         ffn_shift_states = torch.empty((N, B, 1, C), device=device, dtype=dtype)
-        return BlockStateList(att_shift_states, ffn_shift_states, wkv_states)
+        return BlockStateList(att_shift_channel_states, ffn_shift_states, wkv_shift_channel_states)
 
     def __getitem__(self, layer: int):
         return BlockState(
-            TimeMixState(self.att_shift_states[layer], self.wkv_states[layer]),
+            TimeMixState(self.att_shift_channel_states[layer], self.wkv_shift_channel_states[layer]),
             ChannelMixState(self.ffn_shift_states[layer]))
 
-    def __setitem__(self, layer: int, state: BlockState):
+    def __setitem__(self, layer: int, state: BlockState, channel_id: int):
         # HOT FIX 2**12, 12 should = layer count
         # print("[__setitem__] layer", layer)
         # print("[__setitem__] state.time_mix_state.shift_state", state.time_mix_state.shift_state.shape)
         # print("[__setitem__] self.att_shift_states[layer]", self.att_shift_states[layer].shape)
 
-        self.att_shift_states[layer] = state.time_mix_state.shift_state[:,-(2**12):,:]
-        self.wkv_states[layer] = state.time_mix_state.wkv_state
+        self.att_shift_channel_states[layer][channel_id] = state.time_mix_state[channel_id].shift_state[:,-(2**12):,:]
+        self.wkv_shift_channel_states[layer][channel_id] = state.time_mix_state[channel_id].wkv_state
         self.ffn_shift_states[layer] = state.channel_mix_state.shift_state
 
 ########################################################################################################
@@ -364,7 +366,7 @@ class RWKV_ChannelMix(JITModClass):
 
 class Block(nn.Module):
 
-    def __init__(self, layer_id, n_layer, n_embd, dim_att, dim_ffn, att_channels=2):
+    def __init__(self, layer_id, n_layer, n_embd, dim_att, dim_ffn, att_channels):
         super().__init__()
         self.layer_id = layer_id
 
@@ -376,9 +378,7 @@ class Block(nn.Module):
 
         self.att_channels = att_channels
         
-        self.att = []
-        for i in range(self.att_channels):
-            self.att.append(RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att))
+        self.att = [ RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att) for i in range(self.att_channels) ]
 
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
@@ -388,11 +388,12 @@ class Block(nn.Module):
             
         att_outs = []
         att_states = {}
+        
         x_ln1 = self.ln1(x)
         for i in range(self.att_channels):
             att_out, att_state = self.att[i](
                 x_ln1,
-                last_state.time_mix_states[i],
+                last_state.time_mix_states[self.layer_id][i],
             )
             att_outs.append(att_out)
             
@@ -491,7 +492,8 @@ class RWKV(L.LightningModule):
                  dim_ffn: Optional[int] = None,
                  substep_cuda_cache_clear: bool = False,
                  substep_logging: bool = False,
-                 torch_set_float32_matmul_precision:str = 'high'
+                 torch_set_float32_matmul_precision:str = 'high',
+                 time_shift_channels: int = 2
                  ):
 
         # Lets save everything in one shot
@@ -549,15 +551,17 @@ class RWKV(L.LightningModule):
                  "--extra-device-vectorization", f"-DTmax={self.ctx_len}"
              ],
              is_python_module=False)
+        
+        self.time_shift_channels = time_shift_channels
 
         self.blocks = nn.ModuleList([
-            Block(i, n_layer, n_embd, dim_att, dim_ffn) for i in range(n_layer)
+            Block(i, n_layer, n_embd, dim_att, dim_ffn, self.time_shift_channels) for i in range(n_layer)
         ])
 
         self.ln_out = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size, bias=False)
 
-        self.load_state_dict(torch.load(load_model, map_location='cpu'))
+        # self.load_state_dict(torch.load(load_model, map_location='cpu'))
 
     def configure_optimizers(self):
         if self.bptt_learning == False:
@@ -788,7 +792,7 @@ class RWKV(L.LightningModule):
         return -1
 
     @TCompileBaseline
-    def forward(self, idx: torch.Tensor, last_att_shift_states: torch.Tensor, last_ffn_shift_states: torch.Tensor,
+    def forward(self, idx: torch.Tensor, last_att_shift_channel_states: List[torch.Tensor], last_ffn_shift_states: torch.Tensor,
                 last_wkv_states: torch.Tensor):
         B, T = idx.size()
         assert T <= self.ctx_len, "Cannot forward, model ctx_len is exhausted."
@@ -796,16 +800,18 @@ class RWKV(L.LightningModule):
         x = self.emb(idx)
 
         new_states = BlockStateList.empty(self.n_layer, B, self.n_embd,
-                                          x.device, x.dtype)
+                                          x.device, x.dtype, self.time_shift_channels)
         
-        if last_att_shift_states is None:
+        if last_att_shift_channel_states is None:
             cur_bs_list = BlockStateList.empty(
                 self.n_layer, B,
                 self.n_embd,
-                x.device, x.dtype
+                x.device,
+                x.dtype,
+                self.time_shift_channels
             )
         else:
-            cur_bs_list = BlockStateList(last_att_shift_states,last_ffn_shift_states, last_wkv_states)
+            cur_bs_list = BlockStateList(last_att_shift_channel_states,last_ffn_shift_states, last_wkv_states)
 
         # Avoid using the zip operation, as torch.compile throws an exception on it
         # with `zip not reconized as a valid function`
@@ -828,7 +834,7 @@ class RWKV(L.LightningModule):
 
         x = self.head(x)
 
-        return x, new_states.att_shift_states, new_states.ffn_shift_states, new_states.wkv_states
+        return x, new_states.att_shift_channel_states, new_states.ffn_shift_states, new_states.wkv_shift_channel_states
 
     #
     # Custom overwrite of manual_backwards operation, to skip the "manual_backwards"
