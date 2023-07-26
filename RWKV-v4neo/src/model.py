@@ -167,8 +167,8 @@ class BlockStateList:
     @staticmethod
     def create(N, B, C, device, dtype, att_channels):
         result = BlockStateList.empty(N, B, C, device, dtype, att_channels)
-        result.wkv_states[:] = 0
-        result.wkv_states[:, :, :, -1] = -1e38
+        result.wkv_shift_channel_states[:] = 0
+        result.wkv_shift_channel_states[:, :, :, -1] = -1e38
 
         result.att_shift_channel_states[:] = 0
         
