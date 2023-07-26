@@ -388,6 +388,9 @@ class Block(nn.Module):
         self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn)
 
     def forward(self, x, last_state: BlockState):
+        print("hi")
+        print(len(last_state))
+        
         if self.layer_id == 0:
             x = self.ln0(x)
             
