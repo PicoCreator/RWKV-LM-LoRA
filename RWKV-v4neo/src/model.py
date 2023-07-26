@@ -193,14 +193,15 @@ class BlockStateList:
             TimeMixState(self.att_shift_channel_states[layer], self.wkv_shift_channel_states[layer]),
             ChannelMixState(self.ffn_shift_states[layer]))
 
-    def __setitem__(self, layer: int, state: BlockState, channel_id: int):
+    def __setitem__(self, layer: int, state: BlockState):
         # HOT FIX 2**12, 12 should = layer count
         # print("[__setitem__] layer", layer)
         # print("[__setitem__] state.time_mix_state.shift_state", state.time_mix_state.shift_state.shape)
         # print("[__setitem__] self.att_shift_states[layer]", self.att_shift_states[layer].shape)
 
-        self.att_shift_channel_states[layer][channel_id] = state.time_mix_state[channel_id].shift_state[:,-(2**12):,:]
-        self.wkv_shift_channel_states[layer][channel_id] = state.time_mix_state[channel_id].wkv_state
+        for i in range(len(self.time_mix_state.shift_state)):
+            self.att_shift_channel_states[layer][i] = state.time_mix_state[i].shift_state[:,-(2**12):,:]
+            self.wkv_shift_channel_states[layer][i] = state.time_mix_state[i].wkv_state
         self.ffn_shift_states[layer] = state.channel_mix_state.shift_state
 
 ########################################################################################################
@@ -796,7 +797,7 @@ class RWKV(L.LightningModule):
 
     @TCompileBaseline
     def forward(self, idx: torch.Tensor, last_att_shift_channel_states: List[torch.Tensor], last_ffn_shift_states: torch.Tensor,
-                last_wkv_states: torch.Tensor):
+                last_wkv_shift_channel_states: List[torch.Tensor]):
         B, T = idx.size()
         assert T <= self.ctx_len, "Cannot forward, model ctx_len is exhausted."
 
@@ -814,7 +815,7 @@ class RWKV(L.LightningModule):
                 self.time_shift_channels
             )
         else:
-            cur_bs_list = BlockStateList(last_att_shift_channel_states,last_ffn_shift_states, last_wkv_states)
+            cur_bs_list = BlockStateList(last_att_shift_channel_states, last_ffn_shift_states, last_wkv_shift_channel_states)
 
         # Avoid using the zip operation, as torch.compile throws an exception on it
         # with `zip not reconized as a valid function`
