@@ -176,6 +176,13 @@ class BlockStateList:
         result.shift_states[:] = 0
         return result
 
+    def random(N, B, C, device, dtype):
+        wkv_states = torch.randn((N, B, C, 3),
+                                    device=device,
+                                    dtype=torch.float)
+        shift_states = torch.randn((N, 2, B, C), device=device, dtype=dtype)
+        return BlockStateList(shift_states, wkv_states)
+
     # @ TCompileMax (no difference)
     @staticmethod
     def empty(N, B, C, device, dtype):
@@ -422,7 +429,8 @@ class RWKV(RWKV_MAIN_MODULE):
                  torch_set_float32_matmul_precision:str = 'high',
 
                  # EXPERIMENTAL noise based training
-                 noisy_init_state_training: bool = False
+                 noisy_init_state_training: bool = False,
+                 noisy_init_state_prefix_range: int = 0
                  ):
 
         # Lets save everything in one shot
@@ -462,6 +470,7 @@ class RWKV(RWKV_MAIN_MODULE):
 
         # EXPERIMENTAL noise based training
         self.noisy_init_state_training = noisy_init_state_training
+        self.noisy_init_state_prefix_range = noisy_init_state_prefix_range
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -876,17 +885,22 @@ class RWKV(RWKV_MAIN_MODULE):
             0, dtype=self.emb.weight.dtype).requires_grad_()
         steps = 0
         segment_count = math.ceil(T / self.ctx_len)
-        states = BlockStateList.create(self.n_layer, B, C, seq.device,
-                                    self.emb.weight.dtype)
 
         if self.noisy_init_state_training:
+            states = BlockStateList.random(self.n_layer, B, C, seq.device,
+                                        self.emb.weight.dtype)
+        else:
+            states = BlockStateList.create(self.n_layer, B, C, seq.device,
+                                        self.emb.weight.dtype)
+
+        if self.noisy_init_state_prefix_range > 0:
             # We generate a noisy prompt, and perform a forward pass for it
             # the idea here, is that by intrdoucing a more randomized initial state
             # the model will generalise and learn better. Even with multi-epoch learning
             # as each learning run will never be "unique"
 
             # Noise range, will be half to full context length
-            noise_range = randint(self.ctx_len // 2, self.ctx_len - 1)
+            noise_range = randint(self.noisy_init_state_prefix_range // 2, self.noisy_init_state_prefix_range - 1)
 
             # Generate the noise without gradient
             with torch.no_grad():  
