@@ -430,7 +430,7 @@ class RWKV(RWKV_MAIN_MODULE):
 
                  # EXPERIMENTAL noise based training
                  noisy_init_state_training: bool = False,
-                 noisy_init_state_prefix_range: int = 0
+                 noisy_init_state_append_size: int = 0
                  ):
 
         # Lets save everything in one shot
@@ -470,7 +470,7 @@ class RWKV(RWKV_MAIN_MODULE):
 
         # EXPERIMENTAL noise based training
         self.noisy_init_state_training = noisy_init_state_training
-        self.noisy_init_state_prefix_range = noisy_init_state_prefix_range
+        self.noisy_init_state_append_size = noisy_init_state_append_size
 
         dim_att = dim_att or n_embd
         dim_ffn = dim_ffn or n_embd * 4
@@ -893,14 +893,14 @@ class RWKV(RWKV_MAIN_MODULE):
             states = BlockStateList.create(self.n_layer, B, C, seq.device,
                                         self.emb.weight.dtype)
 
-        if self.noisy_init_state_prefix_range > 0:
+        if self.noisy_init_state_append_size > 0:
             # We generate a noisy prompt, and perform a forward pass for it
             # the idea here, is that by intrdoucing a more randomized initial state
             # the model will generalise and learn better. Even with multi-epoch learning
             # as each learning run will never be "unique"
 
             # Noise range, will be half to full context length
-            noise_range = randint(self.noisy_init_state_prefix_range // 2, self.noisy_init_state_prefix_range - 1)
+            noise_range = randint(self.noisy_init_state_append_size // 2, self.noisy_init_state_append_size - 1)
 
             # Generate the noise without gradient
             with torch.no_grad():  
