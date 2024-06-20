@@ -228,8 +228,11 @@ class RWKV_TimeMix(JITModClass):
 
             # fancy time_mix
             self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
+            self.time_mix_kw = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
             self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
+            self.time_mix_vw = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
             self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
+            self.time_mix_rw = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
             # fancy time_decay
             decay_speed = torch.ones(n_head)
@@ -266,13 +269,18 @@ class RWKV_TimeMix(JITModClass):
         xxx = torch.concat((last_state.shift_state, x), dim=1)
         xxxx = self.time_shift(xxx)
         xx = xxxx[:, -x.shape[1]:, :]
+        zx = xxx[:, -x.shape[1]-1:-1, :] # is equal to base -1
     
         # xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]), dim=1)
         # xx = self.time_shift(x)
 
-        xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
-        xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
-        xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
+        xxk = x * self.time_mix_k + zx * (1 - self.time_mix_k)
+        xxv = x * self.time_mix_v + zx * (1 - self.time_mix_v)
+        xxr = x * self.time_mix_r + zx * (1 - self.time_mix_r)
+
+        xk = xxk * self.time_mix_kw + xx * (1 - self.time_mix_kw)
+        xv = xxv * self.time_mix_vw + xx * (1 - self.time_mix_vw)
+        xr = xxr * self.time_mix_rw + xx * (1 - self.time_mix_rw)
 
         r = self.receptance(xr).view(B, TT, self.n_head, self.head_size).transpose(1, 2)            # BTC -> BHTS
         k = self.key(xk).view(B, TT, self.n_head, self.head_size).transpose(1, 2).transpose(-2, -1) # BTC -> BHTS -> BHST
